@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 
 export const metadata: Metadata = {
   title: "Vautch — seu cantinho da internet",
@@ -11,7 +12,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
@@ -24,19 +25,14 @@ export default function RootLayout({
           rel="stylesheet"
         />
         <link rel="stylesheet" href="/proto/style.css" />
-      </head>
-      <body>
         {/* aplica o tema salvo ANTES do paint pra não piscar (light→dark) no
-            refresh. Script bloqueante como 1º filho do body. Default: light. */}
-        <script
-          // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{
-            __html:
-              "(function(){try{var t=localStorage.getItem('vault.theme')||'light';document.body.dataset.theme=t;}catch(e){}})();",
-          }}
-        />
-        {children}
-      </body>
+            refresh. beforeInteractive injeta no HTML antes da hidratação;
+            seta no <html> (sempre existe). Default: light no 1º acesso. */}
+        <Script id="vautch-theme" strategy="beforeInteractive">
+          {`(function(){try{var t=localStorage.getItem('vault.theme')||'light';document.documentElement.dataset.theme=t}catch(e){}})()`}
+        </Script>
+      </head>
+      <body>{children}</body>
     </html>
   );
 }

@@ -1081,11 +1081,13 @@ const THEME_KEY = "vault.theme";
 const themeToggle = document.getElementById("themeToggle");
 
 function applyTheme(t) {
-  document.body.dataset.theme = t; // o switch (sol/lua/knob) reage via CSS
+  // atributo no <html> (não no body): assim o script inline do <head> aplica
+  // o tema antes do paint, sem flash, e o CSS html[data-theme] reage via CSS
+  document.documentElement.dataset.theme = t;
 }
 
 themeToggle.addEventListener("click", () => {
-  const next = document.body.dataset.theme === "dark" ? "light" : "dark";
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   localStorage.setItem(THEME_KEY, next);
   applyTheme(next);
 });

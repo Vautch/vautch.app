@@ -30,7 +30,7 @@
 }
 
 /* tema escuro: carvão neutro com tinta creme — não marrom */
-body[data-theme="dark"] {
+html[data-theme="dark"] {
   --paper: #131316;
   --paper-deep: #1d1d22;
   --ink: #eae7e0;
@@ -53,7 +53,7 @@ body[data-theme="dark"] {
   --shadow-lift: 0 2px 4px rgba(0,0,0,.45), 0 18px 40px -12px rgba(0,0,0,.7);
 }
 
-body[data-theme="dark"] .grain { opacity: .3; }
+html[data-theme="dark"] .grain { opacity: .3; }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -181,8 +181,8 @@ body.is-empty .wordmark { margin-top: 0; }   /* centralizado: sem o respiro */
   display: block;
 }
 .logo-dark { display: none; }
-body[data-theme="dark"] .logo-light { display: none; }
-body[data-theme="dark"] .logo-dark { display: block; }
+html[data-theme="dark"] .logo-light { display: none; }
+html[data-theme="dark"] .logo-dark { display: block; }
 
 .tagline {
   font-style: italic;
@@ -220,7 +220,7 @@ body[data-theme="dark"] .logo-dark { display: block; }
   transform-origin: top right;
   animation: menuPop .28s cubic-bezier(.2,1,.3,1.1) both;
 }
-body[data-theme="dark"] .menu-card { border-color: rgba(236,231,224,.12); }
+html[data-theme="dark"] .menu-card { border-color: rgba(236,231,224,.12); }
 
 @keyframes menuPop {
   from { opacity: 0; transform: translateY(-8px) scale(.96); }
@@ -280,7 +280,7 @@ body[data-theme="dark"] .menu-card { border-color: rgba(236,231,224,.12); }
 }
 
 /* sol/lua de referência no trilho — discretos, atrás do knob */
-body[data-theme="dark"] .theme-switch {
+html[data-theme="dark"] .theme-switch {
   box-shadow: 0 1px 3px rgba(0,0,0,.5), 0 6px 16px -6px rgba(0,0,0,.7);
 }
 .theme-switch .ts-icon {
@@ -309,10 +309,10 @@ body[data-theme="dark"] .theme-switch {
 
 /* mostra só o ícone do modo atual dentro do knob */
 .ts-knob-moon { display: none; }
-body[data-theme="dark"] .ts-knob-sun { display: none; }
-body[data-theme="dark"] .ts-knob-moon { display: block; }
+html[data-theme="dark"] .ts-knob-sun { display: none; }
+html[data-theme="dark"] .ts-knob-moon { display: block; }
 
-body[data-theme="dark"] .theme-switch .ts-knob {
+html[data-theme="dark"] .theme-switch .ts-knob {
   transform: translateX(26px);
 }
 
@@ -393,7 +393,7 @@ body[data-theme="dark"] .theme-switch .ts-knob {
   box-shadow: 0 2px 6px rgba(31,27,22,.07), 0 14px 34px -10px rgba(31,27,22,.22);
   transition: box-shadow .3s, transform .3s;
 }
-body[data-theme="dark"] .intake-field {
+html[data-theme="dark"] .intake-field {
   box-shadow: 0 2px 6px rgba(0,0,0,.4), 0 16px 38px -10px rgba(0,0,0,.6);
 }
 
@@ -401,7 +401,7 @@ body[data-theme="dark"] .intake-field {
   box-shadow: 0 3px 10px rgba(31,27,22,.1), 0 20px 46px -10px rgba(31,27,22,.3);
   transform: translateY(-2px);
 }
-body[data-theme="dark"] .intake-field:focus-within {
+html[data-theme="dark"] .intake-field:focus-within {
   box-shadow: 0 3px 10px rgba(0,0,0,.5), 0 22px 50px -10px rgba(0,0,0,.7);
 }
 
@@ -557,15 +557,15 @@ body[data-theme="dark"] .intake-field:focus-within {
 .chip:hover { border-color: var(--ink); color: var(--ink); }
 
 /* no dark mode o contorno escuro some no fundo — clareia para ficar visível */
-body[data-theme="dark"] .chip:not(.is-active) {
+html[data-theme="dark"] .chip:not(.is-active) {
   background: rgba(19,19,22, 0.55);
   border-color: rgba(255,255,255,.22);
 }
-body[data-theme="dark"] .chip-trash:not(.is-active) {
+html[data-theme="dark"] .chip-trash:not(.is-active) {
   border-color: color-mix(in srgb, var(--danger) 50%, transparent);
 }
-body[data-theme="dark"] .chip.is-active:hover { color: var(--paper); }
-body[data-theme="dark"] .chip:hover { border-color: var(--ink); color: var(--ink); }
+html[data-theme="dark"] .chip.is-active:hover { color: var(--paper); }
+html[data-theme="dark"] .chip:hover { border-color: var(--ink); color: var(--ink); }
 
 .chip.is-active {
   background: var(--ink);
@@ -735,7 +735,7 @@ body.view-compact .note-body {
 /* seções do dropdown: filtro + gerência */
 .dd-filter { display: flex; flex-direction: column; gap: 2px; }
 .dd-div { height: 1px; background: rgba(31,27,22,.15); margin: 6px 4px; }
-body[data-theme="dark"] .dd-div { background: rgba(236,231,224,.16); }
+html[data-theme="dark"] .dd-div { background: rgba(236,231,224,.16); }
 
 .dd-act {
   display: block;
@@ -806,7 +806,7 @@ body[data-theme="dark"] .dd-div { background: rgba(236,231,224,.16); }
   color: var(--ink);
   outline: none;
 }
-body[data-theme="dark"] .dd-edit-inp {
+html[data-theme="dark"] .dd-edit-inp {
   border-color: rgba(236,231,224,.2);
   background: rgba(255,255,255,.06);
 }
@@ -863,7 +863,7 @@ body[data-theme="dark"] .dd-edit-inp {
   border-top: 1px dashed rgba(31,27,22,.2);
   padding-top: 8px;
 }
-body[data-theme="dark"] .cat-sub-head:not(:first-child) { border-color: rgba(236,231,224,.18); }
+html[data-theme="dark"] .cat-sub-head:not(:first-child) { border-color: rgba(236,231,224,.18); }
 
 .sub-option {
   font-family: var(--mono);
@@ -1195,10 +1195,10 @@ body[data-theme="dark"] .cat-sub-head:not(:first-child) { border-color: rgba(236
 .source-print     .source-icon { color: var(--sky); }
 .source-vimeo     .source-icon { color: #1ab7ea; }
 
-body[data-theme="dark"] .source-youtube .source-icon { color: #e3493f; }
-body[data-theme="dark"] .source-instagram .source-icon { color: #e25a1d; }
-body[data-theme="dark"] .source-facebook .source-icon { color: #8aa9c9; }
-body[data-theme="dark"] .source-web .source-icon { color: #d2a542; }
+html[data-theme="dark"] .source-youtube .source-icon { color: #e3493f; }
+html[data-theme="dark"] .source-instagram .source-icon { color: #e25a1d; }
+html[data-theme="dark"] .source-facebook .source-icon { color: #8aa9c9; }
+html[data-theme="dark"] .source-web .source-icon { color: #d2a542; }
 
 .card-top-right {
   display: flex;
@@ -1327,7 +1327,7 @@ body[data-theme="dark"] .source-web .source-icon { color: #d2a542; }
 }
 
 .cat-create:hover, .sub-create:hover { background: var(--accent); }
-body[data-theme="dark"] .cat-create, body[data-theme="dark"] .sub-create { color: var(--paper); }
+html[data-theme="dark"] .cat-create, html[data-theme="dark"] .sub-create { color: var(--paper); }
 
 .cat-receitas { background: var(--accent-soft); color: var(--accent); }
 .cat-design   { background: var(--sky-soft); color: var(--sky); }
