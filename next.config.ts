@@ -1,15 +1,17 @@
 import type { NextConfig } from "next";
 
-// CSP — frame-src libera SÓ os domínios dos embeds (ver docs/decisions/0001-embeds-spec.md).
-// script/style ainda permissivos p/ não quebrar o Next; endurecer com nonces antes do launch (ADR 0002).
+// CSP — governa o que ESTE documento carrega. frame-src libera os embeds
+// (ver docs/decisions/0001-embeds-spec.md); style/font liberam o Google Fonts
+// do protótipo; connect libera as APIs que o app usa (microlink/noembed/etc).
+// script ainda permissivo p/ não quebrar o Next; endurecer com nonces no launch (ADR 0002).
 const csp = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co https://api.microlink.io",
-  "frame-src https://www.instagram.com https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com https://www.threads.net https://www.facebook.com https://www.tiktok.com https://player.vimeo.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "connect-src 'self' https://*.supabase.co https://api.microlink.io https://noembed.com https://api.anthropic.com https://script.google.com",
+  "frame-src https://www.instagram.com https://www.youtube.com https://www.youtube-nocookie.com https://platform.twitter.com https://www.threads.net https://www.facebook.com https://www.tiktok.com https://player.vimeo.com https://vimeo.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

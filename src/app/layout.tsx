@@ -1,38 +1,31 @@
 import type { Metadata } from "next";
-import { Fraunces, Newsreader, Spline_Sans_Mono } from "next/font/google";
-import "./globals.css";
-
-const fraunces = Fraunces({
-  variable: "--font-fraunces",
-  subsets: ["latin"],
-  display: "swap",
-});
-const newsreader = Newsreader({
-  variable: "--font-newsreader",
-  subsets: ["latin"],
-  display: "swap",
-});
-const splineMono = Spline_Sans_Mono({
-  variable: "--font-spline-mono",
-  subsets: ["latin"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
-  title: "Vautch — tudo que você amou, num lugar só",
-  description:
-    "Salve links, notas e imagens num arquivo pessoal cronológico. Sem algoritmo.",
+  title: "Vautch — seu cantinho da internet",
+  description: "tudo que você amou, num lugar só.",
 };
 
+// Port verbatim do protótipo: fontes da marca + CSS do protótipo via <link>,
+// servidos estaticamente (idênticos ao original). Tailwind não é usado nesta fase.
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="pt-BR"
-      className={`${fraunces.variable} ${newsreader.variable} ${splineMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full">{children}</body>
+    <html lang="pt-BR">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Spline+Sans+Mono:wght@400;500&display=swap"
+          rel="stylesheet"
+        />
+        <link rel="stylesheet" href="/proto/style.css" />
+      </head>
+      <body>{children}</body>
     </html>
   );
 }

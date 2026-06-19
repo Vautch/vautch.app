@@ -1,0 +1,1801 @@
+/* ============================================
+   VAULT — arquivo pessoal editorial
+   papel quente · serifa expressiva · scrapbook vivo
+   ============================================ */
+
+:root {
+  --paper: #f4efe6;
+  --paper-deep: #ece5d8;
+  --ink: #1f1b16;
+  --ink-soft: #5c5446;
+  --ink-faint: #968b78;
+  --accent: #d4490f;        /* terracota queimada */
+  --accent-soft: #f3d9cc;
+  --leaf: #4a6741;
+  --leaf-soft: #dde5d4;
+  --sky: #3d5a80;
+  --sky-soft: #d6e0ea;
+  --gold: #b8860b;
+  --gold-soft: #efe3c2;
+  --danger: #c8372d;        /* vermelho da lixeira */
+  --card: #fdfbf6;
+  --shadow: 0 1px 2px rgba(31,27,22,.06), 0 8px 24px -8px rgba(31,27,22,.14);
+  --shadow-lift: 0 2px 4px rgba(31,27,22,.08), 0 18px 40px -12px rgba(31,27,22,.22);
+  --rose: #8d3b63;
+  --rose-soft: #ead7e0;
+  --smoke: 150, 139, 120;
+  --serif: "Fraunces", serif;
+  --body: "Newsreader", serif;
+  --mono: "Spline Sans Mono", monospace;
+}
+
+/* tema escuro: carvão neutro com tinta creme — não marrom */
+body[data-theme="dark"] {
+  --paper: #131316;
+  --paper-deep: #1d1d22;
+  --ink: #eae7e0;
+  --ink-soft: #aeaba2;
+  --ink-faint: #75726b;
+  --accent: #e25a1d;
+  --accent-soft: #3b2114;
+  --leaf: #8fb07f;
+  --leaf-soft: #222b1e;
+  --sky: #8aa9c9;
+  --sky-soft: #1d2733;
+  --gold: #d2a542;
+  --gold-soft: #2e2715;
+  --rose: #d98cb0;
+  --rose-soft: #33222b;
+  --danger: #e5564a;        /* vermelho da lixeira (dark) */
+  --card: #1f1f24;
+  --smoke: 215, 212, 200;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -8px rgba(0,0,0,.55);
+  --shadow-lift: 0 2px 4px rgba(0,0,0,.45), 0 18px 40px -12px rgba(0,0,0,.7);
+}
+
+body[data-theme="dark"] .grain { opacity: .3; }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; scrollbar-gutter: stable; }
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 17px;
+  line-height: 1.55;
+  min-height: 100vh;
+  overflow-x: clip;   /* clip (não hidden) p/ não quebrar o position:sticky do logo */
+}
+
+/* sem nada guardado: tudo centralizado no meio da tela. Ao adicionar itens,
+   o layout volta ao fluxo normal do topo. Cada bloco mantém width:100% para
+   sua centralização interna (max-width + margin auto) continuar valendo. */
+body.is-empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+body.is-empty .topbar    { width: 720px; max-width: 100%; }
+body.is-empty .intake,
+body.is-empty .filterbar { width: 640px; max-width: 100%; }
+body.is-empty .endcap { display: none; }
+/* no estado vazio o logo está centralizado: sem o respiro pro topbar fixo */
+body.is-empty .topbar { padding-top: 0; }
+
+/* tela vazia sem itens na lixeira: nada de filterbar */
+.filterbar.is-hidden { display: none; }
+
+::selection { background: var(--accent); color: var(--paper); }
+
+.mono {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+
+/* grain overlay */
+.grain {
+  position: fixed; inset: 0; pointer-events: none; z-index: 200;
+  opacity: .5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.035 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ============ topbar ============ */
+.topbar {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 22px 0;
+  text-align: center;
+  animation: rise .7s cubic-bezier(.2,.8,.2,1) both;
+}
+
+/* linha de topo: tema à esquerda, menu à direita */
+/* switcher + menu SEMPRE fixos no topo da tela (padrão app) — não se movem
+   entre o estado vazio e o cheio. Desktop: ambos à direita. */
+.topbar-row {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 22px;
+  transition: transform .32s cubic-bezier(.2,.8,.2,1);
+}
+
+.menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px; height: 40px;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 10px;
+  transition: background .2s;
+}
+.menu-btn:hover { background: var(--paper-deep); }
+
+/* hambúrguer de 2 linhas que vira X ao abrir */
+.menu-lines { position: relative; width: 22px; height: 14px; }
+.menu-lines span {
+  position: absolute;
+  left: 0; right: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transition: transform .3s cubic-bezier(.5,1.4,.5,1), top .3s;
+}
+.menu-lines span:first-child { top: 3px; }
+.menu-lines span:last-child { top: 9px; }
+.menu-btn.is-open .menu-lines span:first-child { top: 6px; transform: rotate(45deg); }
+.menu-btn.is-open .menu-lines span:last-child { top: 6px; transform: rotate(-45deg); }
+
+.wordmark {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  line-height: 1;
+  margin-top: 60px;   /* respiro pro topbar-row fixo no topo */
+  position: relative;
+  z-index: 2;
+  cursor: default;    /* h1 em si não é clicável */
+}
+.wordmark .logo-img {
+  cursor: pointer;    /* só a imagem do logo tem hitbox clicável */
+}
+body.is-empty .wordmark { margin-top: 0; }   /* centralizado: sem o respiro */
+
+/* logo em SVG — troca por tema (claro: tinta escura / escuro: creme) */
+.logo-img {
+  height: clamp(58px, 11.5vw, 96px);
+  width: auto;
+  display: block;
+}
+.logo-dark { display: none; }
+body[data-theme="dark"] .logo-light { display: none; }
+body[data-theme="dark"] .logo-dark { display: block; }
+
+.tagline {
+  font-style: italic;
+  font-size: 18px;
+  color: var(--ink-soft);
+  margin-top: 16px;       /* respiro entre o logo e a tagline */
+}
+
+/* contagem de itens: agora vem DEPOIS da barra de busca, antes das tags */
+.topbar-meta {
+  text-align: center;
+  margin: 18px 0 2px;
+}
+
+/* painel de menu / configurações */
+.menu-panel[hidden] { display: none; }
+.menu-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: transparent;        /* só captura clique fora — não escurece */
+}
+
+/* o cartão sai logo abaixo do hambúrguer (topo-direito) */
+.menu-card {
+  position: absolute;
+  top: 60px;
+  right: 18px;
+  width: 270px;
+  max-width: 86vw;
+  background: var(--card);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lift);
+  padding: 8px;
+  transform-origin: top right;
+  animation: menuPop .28s cubic-bezier(.2,1,.3,1.1) both;
+}
+body[data-theme="dark"] .menu-card { border-color: rgba(236,231,224,.12); }
+
+@keyframes menuPop {
+  from { opacity: 0; transform: translateY(-8px) scale(.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.menu-head {
+  padding: 10px 12px 8px;
+  opacity: .65;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+  font-family: var(--body);
+  font-size: 15.5px;
+  text-align: left;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  padding: 11px 12px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.menu-item:hover:not(:disabled) { background: var(--paper-deep); }
+.menu-disabled { opacity: .5; cursor: default; }
+
+.menu-state {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--ink-faint);
+}
+.menu-item.is-on .menu-state { color: var(--leaf); }
+
+/* switch de tema: trilho com sol/lua de referência e knob que carrega o
+   ícone do modo atual */
+.theme-switch {
+  position: relative;
+  width: 58px;
+  height: 30px;
+  border: none;                 /* sem contorno — só sombra, igual à barra de busca */
+  border-radius: 999px;
+  background: var(--paper-deep);
+  box-shadow: 0 1px 3px rgba(31,27,22,.1), 0 5px 14px -6px rgba(31,27,22,.28);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  transition: background .35s, border-color .35s;
+}
+
+/* sol/lua de referência no trilho — discretos, atrás do knob */
+body[data-theme="dark"] .theme-switch {
+  box-shadow: 0 1px 3px rgba(0,0,0,.5), 0 6px 16px -6px rgba(0,0,0,.7);
+}
+.theme-switch .ts-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+  opacity: .8;
+}
+.theme-switch .ts-icon svg { width: 14px; height: 14px; display: block; }
+
+.theme-switch .ts-knob {
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 1px 5px rgba(0,0,0,.35);
+  transition: transform .4s cubic-bezier(.3,1.5,.5,1), background .35s;
+}
+
+.theme-switch .ts-knob svg { width: 15px; height: 15px; }
+
+/* mostra só o ícone do modo atual dentro do knob */
+.ts-knob-moon { display: none; }
+body[data-theme="dark"] .ts-knob-sun { display: none; }
+body[data-theme="dark"] .ts-knob-moon { display: block; }
+
+body[data-theme="dark"] .theme-switch .ts-knob {
+  transform: translateX(26px);
+}
+
+/* ============ notas ============ */
+.card-note { background: var(--gold-soft); }
+
+.note-body {
+  font-family: var(--body);
+  font-size: 17.5px;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.note-body p { margin: 0 0 8px; }
+.note-body p:last-child { margin-bottom: 0; }
+.note-body strong { font-weight: 700; }
+
+.note-list {
+  list-style: none;
+  margin: 0 0 8px;
+}
+
+.note-list li {
+  padding-left: 18px;
+  position: relative;
+  margin-bottom: 4px;
+}
+
+.note-list li::before {
+  content: "•";
+  position: absolute;
+  left: 4px;
+  color: var(--accent);
+}
+
+.note-editor {
+  width: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  font-family: var(--body);
+  font-size: 17.5px;
+  line-height: 1.6;
+  color: var(--ink);
+  border-bottom: 1.5px dashed var(--accent);
+  padding-bottom: 6px;
+}
+
+/* screenshot (print colada) */
+.card-shot-img {
+  margin: 4px 0 14px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.card-shot-img img { display: block; width: 100%; }
+
+/* ============ intake ============ */
+.intake {
+  max-width: 640px;
+  margin: 22px auto 0;
+  padding: 0 24px;
+  animation: rise .7s .12s cubic-bezier(.2,.8,.2,1) both;
+}
+
+.intake-field {
+  display: flex;
+  align-items: center;          /* botões centralizados com o texto (1 linha) */
+  gap: 4px;
+  background: var(--card);
+  border: none;                 /* sem contorno — só sombra (cara de app) */
+  border-radius: 22px;
+  padding: 6px 7px 6px 22px;
+  box-shadow: 0 2px 6px rgba(31,27,22,.07), 0 14px 34px -10px rgba(31,27,22,.22);
+  transition: box-shadow .3s, transform .3s;
+}
+body[data-theme="dark"] .intake-field {
+  box-shadow: 0 2px 6px rgba(0,0,0,.4), 0 16px 38px -10px rgba(0,0,0,.6);
+}
+
+.intake-field:focus-within {
+  box-shadow: 0 3px 10px rgba(31,27,22,.1), 0 20px 46px -10px rgba(31,27,22,.3);
+  transform: translateY(-2px);
+}
+body[data-theme="dark"] .intake-field:focus-within {
+  box-shadow: 0 3px 10px rgba(0,0,0,.5), 0 22px 50px -10px rgba(0,0,0,.7);
+}
+
+.intake { display: flex; flex-direction: column; align-items: center; }
+.intake .intake-form,
+.intake .intake-status,
+.intake .intake-hint { width: 100%; }
+
+.intake-field textarea {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  resize: none;
+  font-family: var(--body);
+  font-size: 16.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  min-width: 0;
+  max-height: 40vh;
+  padding: 9px 0;
+  overflow-y: auto;
+}
+
+.intake-field textarea::placeholder { color: var(--ink-faint); font-style: italic; }
+
+/* link: barra de uma linha, sem quebrar (rola na horizontal) */
+.intake-field.is-link textarea {
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* botão de câmera: só o ícone, sem contorno, padding mínimo */
+.intake-cam {
+  flex-shrink: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px; height: 38px;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color .2s, background .2s, transform .15s;
+}
+.intake-cam svg { width: 21px; height: 21px; }
+.intake-cam:hover { color: var(--accent); background: var(--paper-deep); }
+.intake-cam:active { transform: scale(.9); }
+
+/* botão guardar: ícone (bookmark↔lupa) + palavra; pill primário compacto */
+.intake-btn {
+  flex-shrink: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: .01em;
+  background: var(--ink);
+  color: var(--paper);
+  border: none;
+  border-radius: 999px;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: background .25s, transform .15s;
+}
+.intake-btn .save-ico { display: inline-flex; }
+.intake-btn .save-ico svg { width: 17px; height: 17px; display: block; }
+/* o botão sempre mostra o bookmark — a lupa foi aposentada */
+.intake-btn .ico-find { display: none; }
+
+.intake-btn:hover { background: var(--accent); }
+.intake-btn:active { transform: scale(.96); }
+
+.intake-status {
+  min-height: 22px;
+  margin-top: 12px;
+  text-align: center;
+  color: var(--accent);
+  transition: opacity .3s;
+}
+
+.intake-status .dots::after {
+  content: "";
+  animation: dots 1.2s steps(4) infinite;
+}
+
+@keyframes dots {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75% { content: "..."; }
+}
+
+.intake-hint {
+  text-align: center;
+  margin-top: 2px;
+  opacity: .7;
+}
+
+/* ============ filters ============ */
+/* DESKTOP: tudo numa flex que quebra em linhas; "+mais" cria mais linhas.
+   MOBILE (media query no fim): tags rolam, ações ficam fixas ao lado. */
+.filterbar {
+  max-width: 640px;
+  margin: 18px auto 0;
+  padding: 0 24px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 8px;
+  animation: rise .7s .2s cubic-bezier(.2,.8,.2,1) both;
+}
+
+.filters, .filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* DESKTOP: por padrão mostra uma linha de tags; "+mais" libera as demais */
+.filters {
+  max-height: 38px;
+  overflow: hidden;
+  transition: max-height .3s ease;
+}
+.filters.is-expanded { max-height: 320px; overflow: visible; }
+
+.chip {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: rgba(244,239,230, 0.60);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(31,27,22,.25);
+  border-radius: 999px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: all .25s;
+}
+
+.chip:hover { border-color: var(--ink); color: var(--ink); }
+
+/* no dark mode o contorno escuro some no fundo — clareia para ficar visível */
+body[data-theme="dark"] .chip:not(.is-active) {
+  background: rgba(19,19,22, 0.55);
+  border-color: rgba(255,255,255,.22);
+}
+body[data-theme="dark"] .chip-trash:not(.is-active) {
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+}
+body[data-theme="dark"] .chip.is-active:hover { color: var(--paper); }
+body[data-theme="dark"] .chip:hover { border-color: var(--ink); color: var(--ink); }
+
+.chip.is-active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+.chip { flex-shrink: 0; }
+.filters::-webkit-scrollbar { display: none; }
+
+/* lixeira: sempre o último botão, em vermelho para se distinguir */
+.chip-trash {
+  border-style: solid;
+  position: relative;
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 50%, transparent);
+}
+.chip-trash svg { vertical-align: -2px; }
+.chip-trash .trash-label { margin-left: 6px; }
+.chip-trash:hover { color: #fff; background: var(--danger); border-color: var(--danger); }
+.chip-trash.is-active { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+.chip-more { font-weight: 700; }
+
+/* botões de ação só-ícone: alternar visualização e filtrar */
+.chip-view, .chip-filter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 12px;
+}
+.chip-view svg, .chip-filter svg { width: 16px; height: 16px; display: block; }
+
+/* rótulo de grupo dentro do dropdown de filtros */
+.dd-group-label {
+  font-size: 10px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding: 2px 4px 6px;
+}
+.filter-dropdown .dd-filter { flex-wrap: wrap; max-width: 230px; }
+
+/* ============ modo compacto ============ */
+/* esconde mídia/embeds/stats — fica só título, descrição e "abrir original" */
+body.view-compact .card-embed,
+body.view-compact .card-thumb,
+body.view-compact .card-stats,
+body.view-compact .card-list,
+body.view-compact .card-report,
+body.view-compact .carousel-hint { display: none; }
+
+body.view-compact .feed { gap: 9px; }
+
+/* card compacto em grid: miniatura à esquerda, título + descrição (1 linha
+   cada) à direita; topo e rodapé ocupam a largura toda */
+body.view-compact .card {
+  padding: 12px 15px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "top   top"
+    "thumb title"
+    "thumb body"
+    "foot  foot";
+  column-gap: 13px;
+  align-items: center;
+}
+body.view-compact .card-top    { grid-area: top; }
+body.view-compact .card-cthumb { grid-area: thumb; align-self: center; }
+body.view-compact .card-title,
+body.view-compact .card-quote  { grid-area: title; }  /* citação ocupa o título */
+body.view-compact .card-body,
+body.view-compact .note-body   { grid-area: body; }
+body.view-compact .card-footer { grid-area: foot; }
+
+/* miniatura só no compacto */
+.card-cthumb { display: none; }
+body.view-compact .card-cthumb {
+  display: block;
+  width: 58px;
+  height: 58px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--paper-deep);
+}
+body.view-compact .card-cthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* título e descrição: 1 linha cada (com reticências) */
+body.view-compact .card-title {
+  font-size: 16px;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.view-compact .card-body,
+body.view-compact .card-quote,
+body.view-compact .note-body {
+  margin: 2px 0 0;
+  font-size: 14.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* "+" indicando que a categoria tem subtags */
+.chip-sub-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 5px;
+  opacity: .5;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  vertical-align: middle;
+  position: relative;
+  top: -0.5px;
+}
+.chip.is-active .chip-sub-mark { opacity: .85; }
+
+/* dropdown de subtags ancorado no chip (posição fixa, fora da barra) */
+.sub-dropdown {
+  position: fixed;
+  z-index: 60;
+  transform: translateX(-50%) translateY(-6px) scale(.96);
+  transform-origin: top center;
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lift);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 130px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .22s, transform .22s cubic-bezier(.3,1.3,.5,1);
+}
+.sub-dropdown.is-in { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); pointer-events: auto; }
+
+.sub-opt {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-transform: lowercase;
+  text-align: left;
+  color: var(--ink-soft);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.sub-opt:hover { background: var(--paper-deep); color: var(--ink); }
+.sub-opt.is-active { background: var(--accent); color: #fff; }
+
+/* seções do dropdown: filtro + gerência */
+.dd-filter { display: flex; flex-direction: column; gap: 2px; }
+.dd-div { height: 1px; background: rgba(31,27,22,.15); margin: 6px 4px; }
+body[data-theme="dark"] .dd-div { background: rgba(236,231,224,.16); }
+
+.dd-act {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 10px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.dd-act:hover { background: var(--paper-deep); color: var(--ink); }
+.dd-danger:hover { background: var(--accent); color: #fff; }
+
+.dd-subs { margin-top: 0; padding-top: 0; }
+
+/* cabeçalho do sub-dropdown: nome da tag + ✎ */
+.dd-head-row {
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  gap: 2px;
+}
+.dd-head-name {
+  flex: 1;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .05em;
+  text-transform: lowercase;
+  color: var(--ink-soft);
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  padding: 7px 8px;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.dd-head-name.is-active { color: var(--accent); font-weight: 600; }
+.dd-head-name:hover:not(.is-active) { background: var(--paper-deep); color: var(--ink); }
+
+/* subtag rows: sub-opt ocupa toda a linha */
+.sub-dropdown .dd-sub-row { padding: 0 4px; }
+.sub-dropdown .dd-sub-row .sub-opt { flex: 1; padding: 7px 8px; text-align: left; }
+
+/* inline edit */
+.dd-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+}
+.dd-edit-inp {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--paper-deep);
+  border: 1px solid rgba(31,27,22,.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--ink);
+  outline: none;
+}
+body[data-theme="dark"] .dd-edit-inp {
+  border-color: rgba(236,231,224,.2);
+  background: rgba(255,255,255,.06);
+}
+.dd-edit-inp:focus { border-color: var(--accent); }
+
+.dd-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 10px;
+}
+.dd-sub-name {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: lowercase;
+  color: var(--ink-soft);
+}
+.dd-mini {
+  width: 22px; height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  transition: background .15s, color .15s;
+}
+.dd-mini:hover { background: var(--paper-deep); color: var(--ink); }
+.dd-mini.dd-danger:hover { background: var(--accent); color: #fff; }
+.dd-mini svg { width: 13px; height: 13px; }
+
+.dd-rename { display: flex; gap: 6px; }
+.dd-rename input {
+  flex: 1; min-width: 0;
+  font-family: var(--body);
+  font-size: 14px;
+  border: none;
+  background: var(--paper-deep);
+  border-radius: 7px;
+  padding: 7px 10px;
+  outline: none;
+  color: var(--ink);
+}
+
+/* cabeçalhos e opções de subtag no menu de categoria */
+.cat-sub-head {
+  padding: 4px 10px 2px;
+  opacity: .7;
+}
+.cat-sub-head:not(:first-child) {
+  margin-top: 6px;
+  border-top: 1px dashed rgba(31,27,22,.2);
+  padding-top: 8px;
+}
+body[data-theme="dark"] .cat-sub-head:not(:first-child) { border-color: rgba(236,231,224,.18); }
+
+.sub-option {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .04em;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background .15s;
+}
+.sub-option:hover { background: var(--paper-deep); color: var(--ink); }
+.sub-option.is-current { color: var(--accent); }
+.sub-option.sub-none { opacity: .7; }
+.sub-input { font-size: 13px; }
+
+/* tooltip inteligente de subtag */
+.tip {
+  position: fixed;
+  z-index: 100;                 /* acima de tudo (grão é 50, dropdown 60) */
+  width: 240px;
+  max-width: calc(100vw - 24px);
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow-lift);
+  opacity: 0;
+  transform: translateX(-100%) translateY(-6px) scale(.97);
+  transform-origin: top right;
+  transition: opacity .25s, transform .25s cubic-bezier(.3,1.3,.5,1);
+}
+.tip.is-in { opacity: 1; transform: translateX(-100%) translateY(0) scale(1); }
+
+.tip::after {
+  content: "";
+  position: absolute;
+  top: -6px; right: 22px;
+  width: 12px; height: 12px;
+  background: var(--ink);
+  transform: rotate(45deg);
+}
+
+.tip p {
+  font-family: var(--body);
+  font-size: 14.5px;
+  line-height: 1.45;
+  margin-bottom: 12px;
+}
+.tip strong { color: var(--accent); font-weight: 600; }
+
+.tip-actions { display: flex; gap: 8px; }
+
+.tip-go, .tip-later {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  border: none;
+}
+.tip-go { background: var(--accent); color: #fff; }
+.tip-later { background: rgba(255,255,255,.13); color: var(--paper); }
+.tip-go:hover { filter: brightness(1.1); }
+.tip-later:hover { background: rgba(255,255,255,.22); }
+
+.tip-off {
+  display: block;
+  margin-top: 10px;
+  background: none;
+  border: none;
+  color: rgba(244,239,230,.5);
+  cursor: pointer;
+  padding: 0;
+  font-size: 10px;
+}
+.tip-off:hover { color: var(--paper); }
+
+/* lixeira */
+.card-trash { opacity: .9; }
+
+.card-restore {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--leaf);
+  background: transparent;
+  border: 1px solid var(--leaf-soft);
+  border-radius: 999px;
+  padding: 5px 14px;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.card-restore:hover { background: var(--leaf); color: var(--paper); border-color: var(--leaf); }
+
+/* excluir para sempre — vermelho, ao lado do restaurar */
+.card-purge {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--danger);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  border-radius: 999px;
+  padding: 5px 14px;
+  cursor: pointer;
+  transition: all .2s;
+}
+.card-purge:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+
+.trash-empty { text-align: center; padding: 40px 0; }
+
+/* barra de seleção em massa da lixeira */
+.trash-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 4px 6px;
+  margin-bottom: 4px;
+}
+.trash-selall {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.trash-bar input[type="checkbox"],
+.card-trash .t-check input { accent-color: var(--danger); width: 16px; height: 16px; cursor: pointer; }
+.trash-del-sel {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--danger);
+  border: none;
+  border-radius: 999px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: opacity .2s, transform .15s;
+}
+.trash-del-sel:disabled { opacity: .4; cursor: default; }
+.trash-del-sel:not(:disabled):hover { transform: translateY(-1px); }
+
+.card-trash .t-check { display: inline-flex; align-items: center; margin-right: 10px; }
+.card-trash .card-top { justify-content: flex-start; }
+.card-trash .card-top-right { margin-left: auto; }
+.card-trash.is-selected { outline: 2px solid var(--danger); outline-offset: 1px; }
+
+/* ============ feed ============ */
+.feed {
+  max-width: 640px;
+  margin: 26px auto 0;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.daymark {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 8px 0 -4px;
+}
+
+.daymark::before, .daymark::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(31,27,22,.15);
+}
+
+.daymark span {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-faint);
+}
+
+/* ---- card base ---- */
+.card {
+  position: relative;
+  background: var(--card);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 16px 16px;
+  transition: transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s;
+  animation: rise .6s cubic-bezier(.2,.8,.2,1) both;
+}
+
+.card:nth-child(odd) { transform: rotate(-.4deg); }
+.card:nth-child(even) { transform: rotate(.35deg); }
+
+.card:hover {
+  transform: rotate(0deg) translateY(-4px);
+  box-shadow: var(--shadow-lift);
+  z-index: 2;
+}
+.card.has-open-menu { z-index: 30; }
+
+.card.is-new { animation: popIn .7s cubic-bezier(.2,.9,.3,1.2) both; }
+
+/* card saindo (excluído): amassa, gira e cai — depois o feed se fecha */
+@keyframes cardOut {
+  0%   { opacity: 1; transform: scale(1) rotate(0) translateY(0); filter: none; }
+  45%  { opacity: .85; transform: scale(.94) rotate(1.5deg) translateY(-6px); }
+  100% { opacity: 0; transform: scale(.6) rotate(-7deg) translateY(48px); filter: blur(2px); }
+}
+
+.card.is-leaving {
+  animation: cardOut .45s cubic-bezier(.55,-.15,.65,.35) forwards !important;
+  pointer-events: none;
+  box-shadow: var(--shadow);
+}
+
+.card.is-collapsing {
+  height: 0 !important;
+  min-height: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  margin-top: -26px !important;   /* compensa o gap do feed */
+  overflow: hidden;
+  opacity: 0;
+  box-shadow: none;
+  transition: all .3s cubic-bezier(.2,.8,.2,1);
+}
+
+/* a lixeira só pisca em laranja quando recebe um card — sem sacudida */
+.chip-trash.is-gulping {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip-trash {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip-trash svg { width: 12px; height: 12px; }
+
+/* fumacinha — partículas que se dissipam */
+.puff {
+  position: fixed;
+  z-index: 80;
+  pointer-events: none;
+}
+
+.puff span {
+  position: absolute;
+  left: -9px; top: -9px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--smoke), .55) 0%, rgba(var(--smoke), 0) 70%);
+  filter: blur(1px);
+  opacity: 0;
+  animation: puffOut .7s ease-out forwards;
+}
+
+@keyframes puffOut {
+  0%   { transform: translate(0, 0) scale(.3); opacity: .95; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(var(--s)); opacity: 0; }
+}
+
+/* players que já entregam vídeo vertical pronto (Facebook, YouTube Shorts):
+   janela 9:16 sem recorte, iframe preenche tudo */
+.embed-fill iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(-18px) scale(.96) rotate(-1deg); }
+  to   { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+}
+
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.card-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.source-icon { display: inline-flex; }
+.source-icon svg { width: 14px; height: 14px; display: block; }
+
+.source-instagram .source-icon { color: #d4490f; }
+.source-facebook  .source-icon { color: #3d5a80; }
+.source-youtube   .source-icon { color: #b00020; }
+.source-tiktok    .source-icon { color: var(--ink); }
+.source-twitter   .source-icon { color: var(--ink); }
+.source-threads   .source-icon { color: var(--ink); }
+.source-web       .source-icon { color: #b8860b; }
+.source-nota      .source-icon { color: var(--gold); }
+.source-print     .source-icon { color: var(--sky); }
+.source-vimeo     .source-icon { color: #1ab7ea; }
+
+body[data-theme="dark"] .source-youtube .source-icon { color: #e3493f; }
+body[data-theme="dark"] .source-instagram .source-icon { color: #e25a1d; }
+body[data-theme="dark"] .source-facebook .source-icon { color: #8aa9c9; }
+body[data-theme="dark"] .source-web .source-icon { color: #d2a542; }
+
+.card-top-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.card-del {
+  width: 24px; height: 24px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: .45;                 /* sempre visível (mobile não tem hover) */
+  transition: opacity .2s, background .2s, color .2s;
+}
+
+.card:hover .card-del { opacity: .85; }
+.card-del:hover { background: var(--accent); color: var(--paper); opacity: 1; }
+
+.card-cat {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  background: var(--paper-deep);   /* fallback p/ categorias criadas pelo usuário */
+  color: var(--ink-soft);
+  transition: box-shadow .2s;
+}
+
+.card-cat:hover { box-shadow: 0 0 0 1.5px currentColor; }
+
+/* menu de troca de categoria */
+.cat-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  background: var(--card);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lift);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 190px;
+}
+
+.cat-option {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.cat-option:hover { background: var(--paper-deep); color: var(--ink); }
+.cat-option.is-current { color: var(--accent); }
+.cat-option.is-current::after {
+  content: "";
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  margin-left: 6px;
+  vertical-align: middle;
+  background-color: var(--accent);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 4h12a1 1 0 0 1 1 1v15l-7-4.5L5 20V5a1 1 0 0 1 1-1z'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 4h12a1 1 0 0 1 1 1v15l-7-4.5L5 20V5a1 1 0 0 1 1-1z'/%3E%3C/svg%3E");
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+}
+
+.cat-new {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(31,27,22,.2);
+}
+
+.cat-new input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--body);
+  font-size: 14px;
+  border: none;
+  background: var(--paper-deep);
+  border-radius: 8px;
+  padding: 7px 10px;
+  outline: none;
+  color: var(--ink);
+}
+
+.cat-create, .sub-create {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  background: var(--ink);
+  color: var(--paper);
+  border: none;
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.cat-create:hover, .sub-create:hover { background: var(--accent); }
+body[data-theme="dark"] .cat-create, body[data-theme="dark"] .sub-create { color: var(--paper); }
+
+.cat-receitas { background: var(--accent-soft); color: var(--accent); }
+.cat-design   { background: var(--sky-soft); color: var(--sky); }
+.cat-viagem   { background: var(--leaf-soft); color: var(--leaf); }
+.cat-música   { background: var(--gold-soft); color: var(--gold); }
+.cat-ideias   { background: var(--paper-deep); color: var(--ink-soft); }
+.cat-moda     { background: var(--rose-soft); color: var(--rose); }
+
+/* subtag ao lado da tag, com um › de ligação */
+.card-subcat {
+  position: relative;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 4px 10px 4px 16px;
+  margin-left: 5px;
+  border-radius: 999px;
+  background: var(--paper-deep);
+  color: var(--ink-soft);
+}
+.card-subcat::before {
+  content: "›";
+  position: absolute;
+  left: 5px;
+  opacity: .6;
+}
+
+.card-title {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -.015em;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+
+.card-body { color: var(--ink-soft); font-size: 16.5px; }
+
+/* descrição editável: cursor de texto e placeholder quando vazia */
+.card-body[data-editable-body] { cursor: text; border-radius: 6px; transition: background .2s; min-height: 1em; }
+.card-body[data-editable-body]:hover { background: var(--paper-deep); box-shadow: 0 0 0 5px var(--paper-deep); }
+.card-body[data-editable-body][contenteditable="true"] {
+  outline: none;
+  background: var(--paper-deep);
+  box-shadow: 0 0 0 5px var(--paper-deep), 0 0 0 6px var(--accent);
+}
+.card-body[data-editable-body]:empty::before {
+  content: "+ adicionar descrição";
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+.card-quote {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 420;
+  font-size: 21px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.card-quote::before { content: "“"; color: var(--accent); font-size: 1.4em; }
+.card-quote::after  { content: "”"; color: var(--accent); font-size: 1.4em; }
+
+/* thumbnail strip for reels/videos */
+.card-thumb {
+  margin: 4px 0 14px;
+  border-radius: 12px;
+  height: 150px;
+  position: relative;
+  overflow: hidden;
+}
+
+.thumb-a { background: linear-gradient(125deg, #e8b48a 0%, #d4490f 60%, #7a2a08 100%); }
+.thumb-b { background: linear-gradient(125deg, #9fb8ad 0%, #3d5a80 70%, #1d2f45 100%); }
+.thumb-c { background: linear-gradient(125deg, #d8c98f 0%, #4a6741 70%, #24331f 100%); }
+
+.card-thumb::after {
+  content: "▶";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255,255,255,.92);
+  font-size: 26px;
+  text-shadow: 0 2px 12px rgba(0,0,0,.35);
+}
+
+/* real thumbnail image (Open Graph) */
+.card-thumb-img { height: auto; cursor: zoom-in; position: relative; }
+.card-thumb-img::after { content: none; }
+.card-thumb-img img {
+  display: block;
+  width: 100%;
+  height: auto;              /* mantém o aspect ratio original — sem crop */
+  object-fit: contain;
+}
+
+/* lightbox (tela cheia) */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  background: rgba(0,0,0,.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  cursor: zoom-out;
+  animation: fadeIn .2s ease both;
+}
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.lightbox-close {
+  position: absolute;
+  top: 16px; right: 18px;
+  width: 40px; height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+}
+.lightbox-close:hover { background: rgba(255,255,255,.3); }
+
+/* real platform embeds (Instagram / YouTube / TikTok) */
+.card-embed {
+  margin: 4px 0 14px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--paper-deep);
+  position: relative;
+}
+
+.card-embed iframe {
+  display: block;
+  width: 100%;
+  border: 0;
+}
+
+.embed-wide { aspect-ratio: 16 / 9; }
+.embed-wide iframe { height: 100%; }
+
+/* reels: janela 9:16 que recorta o chrome do embed do Instagram.
+   O embed do IG só funciona direito até ~540px de largura, então o
+   iframe vive num "palco" de tamanho fixo (330×587, geometria validada)
+   e o palco inteiro é escalado via transform até a largura do card —
+   transform nunca distorce a proporção. O fator de escala é calculado
+   em JS (fitReels) porque depende da largura real do card. */
+.embed-reel {
+  width: 100%;
+  aspect-ratio: 9 / 16;
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+/* Instagram: o frame respeita o aspect ratio REAL do conteúdo (--ar = L/A).
+   O header do embed é cortado por cima; a escala é feita em JS (fitEmbeds). */
+.ig-media {
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  aspect-ratio: var(--ar, 0.5625);
+  background: var(--paper-deep);
+}
+.ig-stage {
+  position: absolute;
+  top: 0; left: 0;
+  transform-origin: top left;
+}
+.ig-stage iframe { display: block; border: 0; }
+
+.reel-crop {
+  position: absolute;
+  top: 0; left: 0;
+  width: 330px;
+  height: 586.7px;   /* 330 × 16/9 */
+  transform-origin: top left;
+  overflow: hidden;
+}
+
+.reel-crop iframe {
+  position: absolute;
+  top: -54px;        /* esconde o header do embed */
+  left: -70px;       /* centraliza a coluna do vídeo (caixa 4:5 → 9:16) */
+  width: 470px;      /* 330 ÷ 0.703 */
+  height: 800px;     /* sobra cobre o rodapé de likes, que fica cortado */
+}
+
+/* tiktok: recorta só o vídeo do embed v2 (esconde a barra de progresso por
+   cima e o chrome "Watch more"/autor/legenda por baixo). Geometria validada
+   no preview com iframe travado em 760px: vídeo em x205→515 (310), y10→558
+   (548), proporção ≈ 9:16. O palco de 310px é escalado via transform (JS). */
+.embed-reel.embed-tiktok {
+  width: 100%;
+  aspect-ratio: 302 / 534;
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+}
+.tt-crop {
+  position: absolute;
+  top: 0; left: 0;
+  width: 302px;      /* overscan de ~4px/lado: absorve a variação de
+                        centralização do TikTok, nunca expõe a margem branca */
+  height: 534px;
+  transform-origin: top left;
+  overflow: hidden;
+}
+.tt-crop iframe {
+  position: absolute;
+  top: -10px;        /* esconde a barra de progresso do topo */
+  left: -229px;      /* centraliza a coluna do vídeo (centro do iframe = 380) */
+  width: 760px;      /* largura travada onde a geometria foi medida */
+  height: 620px;
+  border: 0;
+}
+
+/* tweet: altura ajustada via postMessage (JS) — começa compacto */
+.embed-tweet { aspect-ratio: auto; background: transparent; }
+.embed-tweet iframe { width: 100%; height: 320px; transition: height .2s; }
+
+/* threads: altura flexível */
+.embed-threads { aspect-ratio: auto; background: transparent; }
+.embed-threads iframe { width: 100%; height: 580px; }
+
+/* posts quadrados/carrossel do instagram: mesma largura (padding) dos
+   demais cards — só a altura muda */
+.embed-square {
+  width: 100%;
+  position: relative;
+  aspect-ratio: 4 / 5;     /* header do IG + mídia quadrada */
+  overflow: hidden;
+}
+.embed-square iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* camada de ativação: primeiro toque libera a interação com o embed,
+   evitando o clique acidental que abre o Instagram */
+/* camada de ativação: transparente (o embed aparece inteiro por baixo),
+   só intercepta o 1º clique pra evitar saída acidental. Some ao ativar. */
+.embed-guard {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  cursor: pointer;
+  background: transparent;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 14px;
+}
+
+.embed-guard-hint {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  background: rgba(31,27,22,.7);
+  color: #fff;
+  padding: 6px 13px;
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  opacity: .85;
+  transition: opacity .25s, transform .25s;
+}
+.embed-guard:hover .embed-guard-hint { opacity: 1; transform: translateY(-2px); }
+.embed-guard.is-off { display: none; }
+
+/* indicador de carrossel */
+.carousel-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: -6px 0 14px;
+}
+
+.carousel-hint .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+  opacity: .45;
+}
+
+.carousel-hint .dot:first-child { background: var(--accent); opacity: 1; }
+
+.carousel-hint .hint-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-left: 8px;
+}
+
+/* likes/comentários — meta discreta */
+/* stats (views/curtidas/comentários) ocultos — não são relevantes no card */
+.card-stats { display: none; }
+.card-stats span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* título editável */
+.card-title[data-editable] { cursor: text; border-radius: 6px; transition: background .2s; }
+.card-title[data-editable]:hover { background: var(--paper-deep); box-shadow: 0 0 0 6px var(--paper-deep); }
+.card-title[contenteditable="true"] {
+  outline: none;
+  background: var(--paper-deep);
+  box-shadow: 0 0 0 6px var(--paper-deep), 0 0 0 7px var(--accent);
+}
+
+/* ingredient list (recipe cards) */
+.card-list {
+  list-style: none;
+  margin-top: 12px;
+  columns: 2;
+  gap: 24px;
+}
+
+.card-list li {
+  font-size: 15.5px;
+  color: var(--ink-soft);
+  padding: 5px 0;
+  border-bottom: 1px dashed rgba(31,27,22,.14);
+  break-inside: avoid;
+}
+
+.card-list li::before {
+  content: "✦";
+  color: var(--accent);
+  font-size: 10px;
+  margin-right: 8px;
+}
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+
+.card-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* botão de diagnóstico: aparece discreto no hover (desktop) ou semi-visível
+   sempre (mobile, onde não há hover). Baixa JSON de diagnóstico do embed. */
+.card-report {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 7px 3px;
+  background: none;
+  border: 1px solid var(--ink-faint);
+  border-radius: 5px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  opacity: .4;
+  transition: opacity .2s, color .2s, border-color .2s;
+}
+.card-report:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
+
+.card-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: .04em;
+}
+
+.card-link {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .05em;
+  color: var(--accent);
+  text-decoration: none;
+  /* funciona como <a> e como <button>: zera os estilos nativos do botão */
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: border-color .2s;
+}
+
+.card-link:hover { border-color: var(--accent); }
+.card-link:focus { outline: none; }
+.card-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+/* hidden by filter */
+.card.is-hidden { display: none; }
+
+/* ============ endcap ============ */
+.endcap {
+  max-width: 640px;
+  margin: 70px auto 90px;
+  padding: 0 24px;
+  text-align: center;
+}
+
+.endcap-line {
+  width: 60px; height: 1px;
+  background: var(--ink-faint);
+  margin: 0 auto 18px;
+}
+
+/* ============ shared anims ============ */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 560px) {
+  .card-list { columns: 1; }
+  .topbar { padding-top: 6px; }   /* só a tagline aqui; o logo fica acima */
+
+  /* barra começa transparente; fica opaca quando logo entra nela via scroll */
+  .topbar-row {
+    background: transparent;
+    transition: background 0.35s ease, backdrop-filter 0.35s ease, -webkit-backdrop-filter 0.35s ease;
+  }
+  .topbar-row.bar-solid {
+    background: var(--paper);
+  }
+
+  /* o LOGO é o MESMO elemento: começa grande abaixo da barra e, via scroll
+     (JS), encolhe e sobe ficando sticky e pequeno no centro da barra fixa.
+     z acima da barra (60) para aparecer sobre o fundo dela. */
+  .wordmark {
+    position: sticky;
+    top: 22px;
+    z-index: 62;
+    margin-top: 84px;   /* respiro entre o logo grande e a barra fixa */
+    transform-origin: center top;
+    transition: transform .25s cubic-bezier(.2,.8,.2,1);
+  }
+  /* estado vazio: logo centralizado no fluxo (sem sticky/scale) */
+  body.is-empty .wordmark { position: static; margin-top: 0; transform: none; }
+
+  /* guardar vira só o ícone (bookmark/lupa) — mais espaço pro texto */
+  .intake-btn .save-label { display: none; }
+  .intake-btn { padding: 9px; width: 38px; height: 38px; justify-content: center; gap: 0; }
+
+  /* menos espaço antes da timeline (o que importa é o feed) */
+  .topbar-row { justify-content: space-between; }
+  .tagline { font-size: 16px; }
+  .intake { margin-top: 16px; }
+  .filterbar { margin-top: 14px; }
+
+  /* timeline mais larga e compacta: menos respiro nas bordas e entre cards */
+  .feed { padding: 0 10px; gap: 11px; margin-top: 18px; }
+  .card { padding: 13px 13px; border-radius: 15px; }
+  .card-title { font-size: 20px; }
+
+  /* lixeira vira só ícone (sem rótulo) e fica compacta */
+  .chip-trash .trash-label { display: none; }
+  .chip-trash { padding: 7px 11px; }
+  .chip-trash svg { vertical-align: middle; }
+
+  /* filtros: tags em UMA linha rolável; "+mais" e lixeira na linha de baixo.
+     Apertar "+mais" expande as tags em quebra de linha (mostra todas). */
+  .filterbar { flex-direction: column; align-items: center; padding: 0 14px; gap: 8px; }
+  .filters {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-height: none;
+    /* centraliza quando cabe (ex: só "TUDO"); ao rolar, "safe" evita cortar
+       o início — então fica centralizado sem nunca esconder a 1ª tag */
+    justify-content: safe center;
+  }
+  .filters.is-expanded {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    justify-content: center;
+  }
+  .filter-actions { flex-wrap: nowrap; justify-content: center; }
+}
