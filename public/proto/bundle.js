@@ -2108,7 +2108,7 @@ form.addEventListener("submit", async e => {
     type: "video",
     title: fallbackTitle || smartTitle(meta),
     body: isFbPrivate
-      ? "Grupo ou conteúdo privado — o preview não está disponível. Use "abrir original" para ver."
+      ? "Grupo ou conteúdo privado — o preview não está disponível. Use 'abrir original' para ver."
       : fallbackBody || (cleanDesc
         ? cleanDesc.slice(0, 150) + (cleanDesc.length > 150 ? "…" : "")
         : ""),
