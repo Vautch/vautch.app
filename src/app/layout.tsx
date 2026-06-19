@@ -25,7 +25,18 @@ export default function RootLayout({
         />
         <link rel="stylesheet" href="/proto/style.css" />
       </head>
-      <body>{children}</body>
+      <body>
+        {/* aplica o tema salvo ANTES do paint pra não piscar (light→dark) no
+            refresh. Script bloqueante como 1º filho do body. Default: light. */}
+        <script
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('vault.theme')||'light';document.body.dataset.theme=t;}catch(e){}})();",
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

@@ -1090,8 +1090,10 @@ themeToggle.addEventListener("click", () => {
   applyTheme(next);
 });
 
-applyTheme(localStorage.getItem(THEME_KEY) ||
-  (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+// default é "light" (primeiro acesso entra em claro). O tema salvo já foi
+// aplicado por um script inline no <head>/<body> antes do paint (sem flash);
+// aqui só sincronizamos o estado em runtime.
+applyTheme(localStorage.getItem(THEME_KEY) || "light");
 
 /* ---------- escala dos reels (auto-layout sem distorção) ---------- */
 
@@ -1268,7 +1270,10 @@ function toggleViewMode() {
   // toast educativo ao entrar no modo compacto pela primeira vez
   if (viewMode === "compact" && !localStorage.getItem("vault.compactTip")) {
     localStorage.setItem("vault.compactTip", "1");
-    showHintBalloon(document.querySelector(".chip-view"), "Você está no <strong>modo compacto</strong>. Clique duas vezes num card (ou toque, no celular) para expandir.");
+    const msg = isTouch
+      ? "<strong>Modo compacto.</strong> Toque num card para expandir. Segure o dedo para arrastar e reposicionar."
+      : "<strong>Modo compacto.</strong> Clique duas vezes num card para expandir. Arraste para reposicionar.";
+    showHintBalloon(document.querySelector(".chip-view"), msg);
   }
   renderCats();
   if (viewMode === "full") fitReels();
@@ -1738,10 +1743,10 @@ function openCatMenu(card, item, anchor) {
 
   const cats = [...new Set([...presentCats(), item.cat].filter(Boolean))];
   menu.innerHTML = `
-    <div class="cat-sub-head mono">categoria</div>
+    <div class="cat-sub-head mono">tag</div>
     ${cats.map(c => `<button class="cat-option${c === item.cat ? " is-current" : ""}" data-cat="${c}">${c}</button>`).join("")}
     <div class="cat-new">
-      <input type="text" placeholder="nova categoria…" maxlength="24">
+      <input type="text" placeholder="nova tag…" maxlength="24">
       <button class="cat-create">criar</button>
     </div>
     <div class="sub-section">${buildSubSection(item.cat, item.subcat)}</div>`;
@@ -1811,8 +1816,13 @@ function openCatMenu(card, item, anchor) {
   const placeMenu = () => {
     const chip = card.querySelector(".card-cat");
     const r = chip ? chip.getBoundingClientRect() : card.getBoundingClientRect();
-    menu.style.top  = (r.bottom + 6) + "px";
+    const mh = menu.offsetHeight;
+    // horizontal: cabe sempre dentro da viewport
     menu.style.left = Math.max(8, Math.min(r.left, innerWidth - menu.offsetWidth - 8)) + "px";
+    // vertical: abaixo do chip; se estourar embaixo, sobe pra cima do chip
+    let top = r.bottom + 6;
+    if (top + mh > innerHeight - 8 && r.top - 6 - mh > 8) top = r.top - 6 - mh;
+    menu.style.top  = Math.max(8, top) + "px";
     menu.style.zIndex = "9999";
   };
   placeMenu();
@@ -1827,8 +1837,20 @@ function openCatMenu(card, item, anchor) {
   };
 
   input.focus({ preventScroll: true });
-  // no celular, centraliza o menu na tela pro teclado não cobrir
-  if (isTouch) setTimeout(() => menu.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
+  // No celular o teclado sobe e cobre o menu. Como o menu é position:fixed,
+  // scrollIntoView nele é no-op — então rolamos a JANELA pra trazer o chip pra
+  // cima (placeMenu segue o chip no scroll) e o menu fica acima do teclado.
+  if (isTouch) {
+    setTimeout(() => {
+      placeMenu();
+      const mr = menu.getBoundingClientRect();
+      const targetBottom = innerHeight * 0.5;   // metade de cima = acima do teclado
+      let delta = mr.bottom - targetBottom;      // >0 rola pra baixo (conteúdo sobe)
+      const minTop = 64;                         // não deixar o topo do menu sumir
+      if (mr.top - delta < minTop) delta = mr.top - minTop;
+      if (delta > 0) window.scrollBy({ top: delta, behavior: "smooth" });
+    }, 80);
+  }
 
   // fecha ao clicar fora
   setTimeout(() => {
@@ -2142,6 +2164,34 @@ function maybeSuggestSubtag(card, item) {
   setTimeout(() => showTip(card, item), 700);
 }
 
+/* posiciona um balão .tip ancorado a um botão, SEMPRE dentro da viewport:
+   centraliza no botão, empurra p/ caber na tela, vira pra cima se não couber
+   embaixo, e reposiciona a setinha (--arrow-x) pra continuar apontando o botão */
+function placeBalloon(tip, anchorEl, gap = 10) {
+  const a = anchorEl.getBoundingClientRect();
+  const margin = 8;
+  const w = tip.offsetWidth;
+  const h = tip.offsetHeight;
+  const cx = a.left + a.width / 2;          // centro horizontal do botão
+  let left = cx - w / 2;                     // balão centrado no botão
+  left = Math.max(margin, Math.min(left, innerWidth - w - margin));
+  // vertical: embaixo do botão; se estourar, vira pra cima
+  let top = a.bottom + gap;
+  const below = top + h <= innerHeight - margin;
+  if (!below && a.top - gap - h >= margin) {
+    top = a.top - gap - h;
+    tip.classList.add("tip-above");
+  } else {
+    tip.classList.remove("tip-above");
+  }
+  tip.style.left = left + "px";
+  tip.style.top  = top + "px";
+  // seta aponta para o centro do botão, relativa à borda esquerda do balão
+  let arrowX = cx - left;
+  arrowX = Math.max(16, Math.min(arrowX, w - 16));
+  tip.style.setProperty("--arrow-x", arrowX + "px");
+}
+
 function showTip(card, item) {
   document.querySelector(".tip")?.remove();
   const tip = document.createElement("div");
@@ -2156,13 +2206,7 @@ function showTip(card, item) {
   // no body (não no card): cada card tem transform e cria contexto de
   // empilhamento — dentro dele a tooltip ficaria atrás dos cards vizinhos
   document.body.appendChild(tip);
-  const place = () => {
-    const anchor = card.querySelector(".card-cat") || card;
-    const r = anchor.getBoundingClientRect();
-    const left = Math.max(8, Math.min(r.right, innerWidth - 8));
-    tip.style.top  = `${r.bottom + 8}px`;
-    tip.style.left = `${left}px`;
-  };
+  const place = () => placeBalloon(tip, card.querySelector(".card-cat") || card);
   place();
   addEventListener("scroll", place, { passive: true });
   addEventListener("resize", place);
@@ -2187,15 +2231,7 @@ function showHintBalloon(anchorEl, msg, duration = 6000) {
   tip.className = "tip tip-hint";
   tip.innerHTML = `<p>${msg}</p>`;
   document.body.appendChild(tip);
-  const place = () => {
-    const r = anchorEl.getBoundingClientRect();
-    // a seta (::after) fica a ~28px da borda direita do balão; alinhar a ponta
-    // da seta ao CENTRO do botão clicado para o balão "sair" dele
-    const cx = (r.left + r.right) / 2;
-    const left = Math.max(150, Math.min(cx + 28, innerWidth - 8));
-    tip.style.top  = `${r.bottom + 10}px`;
-    tip.style.left = `${left}px`;
-  };
+  const place = () => placeBalloon(tip, anchorEl);
   place();
   addEventListener("scroll", place, { passive: true });
   addEventListener("resize", place);
