@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* paleta editorial "paper" — alinhada ao protótipo (terracota como accent) */
+:root {
+  --paper: #f4f1ea;
+  --paper-deep: #e9e4d8;
+  --ink: #1f1b16;
+  --ink-soft: #6b6358;
+  --accent: #c8553d;
+  --background: var(--paper);
+  --foreground: var(--ink);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-accent: var(--accent);
+  --font-display: var(--font-fraunces);
+  --font-serif: var(--font-newsreader);
+  --font-mono: var(--font-spline-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #14110d;
+    --paper-deep: #1d1813;
+    --ink: #ece7e0;
+    --ink-soft: #a89e90;
+    --background: var(--paper);
+    --foreground: var(--ink);
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-serif), Georgia, serif;
+}
