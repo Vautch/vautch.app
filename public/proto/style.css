@@ -353,6 +353,7 @@ body[data-theme="dark"] .theme-switch .ts-knob {
   border: none;
   outline: none;
   resize: none;
+  overflow: hidden;
   background: transparent;
   font-family: var(--body);
   font-size: 17.5px;
@@ -659,6 +660,13 @@ body.view-compact .card-title {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* em edição no modo compacto: remove o truncamento p/ o usuário ver o texto inteiro */
+body.view-compact .card-body.is-editing {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
 body.view-compact .card-body,
 body.view-compact .card-quote,
 body.view-compact .note-body {
@@ -688,7 +696,7 @@ body.view-compact .note-body {
 /* dropdown de subtags ancorado no chip (posição fixa, fora da barra) */
 .sub-dropdown {
   position: fixed;
-  z-index: 60;
+  z-index: 9999;
   transform: translateX(-50%) translateY(-6px) scale(.96);
   transform-origin: top center;
   background: var(--card);
@@ -1538,9 +1546,9 @@ body[data-theme="dark"] .cat-create, body[data-theme="dark"] .sub-create { color
 .embed-tweet { aspect-ratio: auto; background: transparent; }
 .embed-tweet iframe { width: 100%; height: 320px; transition: height .2s; }
 
-/* threads: altura flexível */
+/* threads: altura menor (texto curto cabe; posts com imagem cortam — usar "abrir original") */
 .embed-threads { aspect-ratio: auto; background: transparent; }
-.embed-threads iframe { width: 100%; height: 580px; }
+.embed-threads iframe { width: 100%; height: 350px; }
 
 /* posts quadrados/carrossel do instagram: mesma largura (padding) dos
    demais cards — só a altura muda */
@@ -1710,8 +1718,8 @@ body[data-theme="dark"] .cat-create, body[data-theme="dark"] .sub-create { color
 .card-link:focus { outline: none; }
 .card-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 
-/* hidden by filter */
-.card.is-hidden { display: none; }
+/* hidden by filter — !important vence a especificidade de body.view-compact .card { display:grid } */
+.card.is-hidden { display: none !important; }
 
 /* ============ endcap ============ */
 .endcap {

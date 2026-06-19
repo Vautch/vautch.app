@@ -1,80 +1,6 @@
 // Vault — dados de exemplo + captura real de metadados e classificação por conteúdo
 
-const VAULT_ITEMS = [
-  {
-    day: "hoje",
-    source: "instagram",
-    cat: "receitas",
-    title: "Pão de queijo de frigideira em 10 min",
-    type: "recipe",
-    list: ["2 ovos", "3 col. polvilho azedo", "100g muçarela", "1 col. requeijão", "pitada de sal", "fio de azeite"],
-    time: "guardado às 09:41",
-    url: "instagram.com/reel/abc123"
-  },
-  {
-    day: "hoje",
-    source: "twitter",
-    cat: "ideias",
-    type: "quote",
-    quote: "A melhor interface é a que você esquece que existe. A segunda melhor é a que você nunca esquece.",
-    body: "— thread sobre design de produto",
-    time: "guardado às 08:12",
-    url: "x.com/post/9921"
-  },
-  {
-    day: "ontem",
-    source: "youtube",
-    cat: "design",
-    title: "Como a Pentagram cria identidades que duram décadas",
-    type: "video",
-    thumb: "thumb-b",
-    body: "Documentário de 24 min sobre o processo da Paula Scher.",
-    time: "guardado às 22:30",
-    url: "youtube.com/watch?v=xyz"
-  },
-  {
-    day: "ontem",
-    source: "instagram",
-    cat: "viagem",
-    title: "Roteiro de 4 dias na Chapada dos Veadeiros",
-    type: "video",
-    thumb: "thumb-c",
-    body: "Cachoeira Santa Bárbara logo cedo, Vale da Lua no fim de tarde. Pousada citada nos comentários.",
-    time: "guardado às 19:05",
-    url: "instagram.com/p/def456"
-  },
-  {
-    day: "semana passada",
-    source: "tiktok",
-    cat: "receitas",
-    title: "Molho de tomate assado da nonna",
-    type: "recipe",
-    list: ["1kg tomate italiano", "1 cabeça de alho", "manjericão fresco", "azeite generoso", "40 min de forno"],
-    time: "guardado terça, 21:17",
-    url: "tiktok.com/@nonna/video/777"
-  },
-  {
-    day: "semana passada",
-    source: "web",
-    cat: "música",
-    title: "Setlist completo do show do Hermeto (1985)",
-    type: "video",
-    thumb: "thumb-a",
-    body: "Gravação restaurada do festival de Montreux. Áudio impecável a partir dos 12 min.",
-    time: "guardado segunda, 23:44",
-    url: "archive.org/hermeto85"
-  },
-  {
-    day: "semana passada",
-    source: "twitter",
-    cat: "design",
-    type: "quote",
-    quote: "Tipografia é o que a voz é para quem fala: ninguém repara quando é boa, todo mundo sente quando é má.",
-    body: "— citação salva de um fio sobre editorial design",
-    time: "guardado domingo, 11:02",
-    url: "x.com/post/5530"
-  }
-];
+const VAULT_ITEMS = [];
 
 const AI_STEPS = [
   "lendo o link",
@@ -907,12 +833,13 @@ function makeCard(item, isNew = false) {
   // descrição editável: clique para editar; Enter quebra linha; blur salva; Esc cancela
   const desc = card.querySelector('[data-editable-body="true"]');
   if (desc && item.id) {
-    desc.addEventListener("click", () => { desc.contentEditable = "true"; desc.focus(); });
+    desc.addEventListener("click", () => { desc.contentEditable = "true"; desc.classList.add("is-editing"); desc.focus(); });
     desc.addEventListener("keydown", e => {
       if (e.key === "Escape") { desc.textContent = item.body || ""; desc.blur(); }
     });
     desc.addEventListener("blur", () => {
       desc.contentEditable = "false";
+      desc.classList.remove("is-editing");
       const t = desc.textContent.trim();
       if (t !== (item.body || "")) { item.body = t; updateSavedField(item.id, "body", t); }
     });
@@ -2173,14 +2100,18 @@ form.addEventListener("submit", async e => {
   }
 
   const cleanDesc = cleanDescription(meta?.description);
+  // Facebook grupos/conteúdo privado: sem embed, sem título real → avisa o usuário
+  const isFbPrivate = source === "facebook" && !embed && !meta?.title;
   const newItem = {
     id: `v${Date.now()}`,
     source, cat,
     type: "video",
     title: fallbackTitle || smartTitle(meta),
-    body: fallbackBody || (cleanDesc
-      ? cleanDesc.slice(0, 150) + (cleanDesc.length > 150 ? "…" : "")
-      : ""),
+    body: isFbPrivate
+      ? "Grupo ou conteúdo privado — o preview não está disponível. Use "abrir original" para ver."
+      : fallbackBody || (cleanDesc
+        ? cleanDesc.slice(0, 150) + (cleanDesc.length > 150 ? "…" : "")
+        : ""),
     stats: parseSocialStats(meta?.description) || parseSocialStats(meta?.title),
     author: meta?.author || null,
     embed,
