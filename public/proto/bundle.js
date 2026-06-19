@@ -106,7 +106,7 @@ function buildEmbed(raw, meta) {
 // metadados Open Graph do link — o mesmo mecanismo das prévias do WhatsApp.
 // Metadados genéricos que as plataformas servem quando bloqueiam robôs —
 // se aparecerem, é lixo, não conteúdo do post.
-const GENERIC_META = /enjoy the videos and music you love|^youtube$|log into facebook|^facebook$|^instagram$|^tiktok( pwa)?$|make your day/i;
+const GENERIC_META = /enjoy the videos and music you love|^youtube$|log into facebook|log in or sign up to facebook|explore the things you love|connect with friends and the world|^facebook$|^instagram$|^tiktok( pwa)?$|make your day/i;
 
 function scrubMeta(meta) {
   if (!meta) return null;
@@ -339,6 +339,25 @@ const CATS_KEY = "vault.cats";       // categorias criadas pelo usuário
 const LEARN_KEY = "vault.learn";     // palavras aprendidas por categoria
 const CATOV_KEY = "vault.catov";     // categoria corrigida dos itens de exemplo
 const SUBOV_KEY = "vault.subov";     // subtag dos itens de exemplo (seed-N → subtag)
+const SEEN_KEY  = "vault.seen";      // IDs marcados como visto (Set serializado)
+const ORDER_KEY = "vault.order";     // ordem customizada dos cards no modo compacto
+
+function loadSeen() {
+  try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) || []); }
+  catch { return new Set(); }
+}
+function toggleSeenFor(id) {
+  const s = loadSeen();
+  const nowSeen = !s.has(id);
+  if (nowSeen) s.add(id); else s.delete(id);
+  localStorage.setItem(SEEN_KEY, JSON.stringify([...s]));
+  return nowSeen;
+}
+function loadOrder() {
+  try { return JSON.parse(localStorage.getItem(ORDER_KEY)) || []; }
+  catch { return []; }
+}
+function saveOrder(ids) { localStorage.setItem(ORDER_KEY, JSON.stringify(ids)); }
 
 const BUILTIN_CATS = ["receitas", "moda", "design", "viagem", "música", "games", "ideias"];
 
@@ -623,16 +642,24 @@ const SOURCE_ICONS = {
   vimeo: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.4 7.3c-.1 2.4-1.8 5.7-5 10a23.7 23.7 0 0 1-5.2 5.3c-1.2.8-2.4 1.3-3.6 1.3-1 0-1.9-.7-2.6-2.2L4.7 17c-.7-2.4-1.4-3.7-2.2-3.7-.2 0-.7.3-1.7 1L.5 13.1c1-.9 2-1.8 3-2.8 1.4-1.2 2.4-1.8 3.1-1.9 1.6-.2 2.6.9 3 3.4.4 2.6.7 4.3 1 5 .5 2.3 1.1 3.5 1.8 3.5.5 0 1.3-.8 2.3-2.3 1-1.6 1.5-2.8 1.6-3.6.1-1.4-.4-2.1-1.6-2.1-.6 0-1.1.1-1.7.4 1.1-3.6 3.2-5.4 6.3-5.2 2.3.1 3.4 1.5 3.1 4z"/></svg>`
 };
 
+const EYE_SVG        = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const EYE_CLOSED_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+
 function cardHTML(item) {
   const cat = `<span class="card-cat cat-${item.cat.replace(/\s+/g, "-")}" title="clique para trocar a categoria">${item.cat}</span>`;
-  // mostra a subtag ao lado da tag quando existir (ex: games › deadlock)
   const sub = item.subcat
     ? `<span class="card-subcat" title="subtag">${item.subcat}</span>`
+    : "";
+  const seenBtn = item.id
+    ? `<button class="card-seen${item.seen ? " is-seen" : ""}" title="${item.seen ? "marcar como não visto" : "marcar como visto"}" aria-label="visto">${item.seen ? EYE_CLOSED_SVG : EYE_SVG}</button>`
+    : "";
+  const seenLabel = item.id
+    ? `<span class="seen-label">Marcado como visto</span>`
     : "";
   const top = `
     <div class="card-top">
       <span class="card-source source-${item.source}"><span class="source-icon">${SOURCE_ICONS[item.source] || SOURCE_ICONS.web}</span>${sourceLabel(item.source)}</span>
-      <span class="card-top-right">${cat}${sub}<button class="card-del" title="excluir do vautch" aria-label="excluir">×</button></span>
+      <span class="card-top-right">${seenBtn}${seenLabel}${cat}${sub}<button class="card-del" title="excluir do vautch" aria-label="excluir">×</button></span>
     </div>`;
 
   let body = "";
@@ -644,11 +671,13 @@ function cardHTML(item) {
     body = `<h2 class="card-title">${item.title}</h2>
       <ul class="card-list">${item.list.map(i => `<li>${i}</li>`).join("")}</ul>`;
   } else {
-    const media = item.embed
-      ? item.embed
-      : item.image
-        ? `<div class="card-thumb card-thumb-img"><img src="${item.image}" alt="" loading="lazy"></div>`
-        : item.thumb ? `<div class="card-thumb ${item.thumb}"></div>` : "";
+    const media = item.isPrivate
+      ? `<div class="card-private-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>`
+      : item.embed
+        ? item.embed
+        : item.image
+          ? `<div class="card-thumb card-thumb-img"><img src="${item.image}" alt="" loading="lazy"></div>`
+          : item.thumb ? `<div class="card-thumb ${item.thumb}"></div>` : "";
     const statParts = item.stats ? [
       item.stats.views    ? `<span title="visualizações">▶ ${item.stats.views}</span>` : "",
       item.stats.likes    ? `<span title="curtidas">♥ ${item.stats.likes}</span>` : "",
@@ -717,11 +746,13 @@ function makeCard(item, isNew = false) {
   const card = document.createElement("article");
   card.className = "card" + (isNew ? " is-new" : "");
   if (item.embed && item.embed.includes("embed-reel")) {
-    card.classList.add("card-reel"); // auto-layout: card abraça o vídeo vertical
+    card.classList.add("card-reel");
   }
   if (item.type === "note") card.classList.add("card-note");
+  if (item.seen) card.classList.add("is-seen");
   card.dataset.cat = item.cat;
   card.dataset.sub = item.subcat || "";
+  card.dataset.id = item.id || "";
   // metadados p/ o sistema de filtros (tipo + período)
   card.dataset.type = item.type || "video";
   card.dataset.source = item.source || "";
@@ -730,6 +761,63 @@ function makeCard(item, isNew = false) {
   card.dataset.search = [item.title, item.body, item.text, item.quote, item.cat, sourceLabel(item.source), item.author]
     .filter(Boolean).join(" ");
   card.innerHTML = cardHTML(item);
+
+  // ---- botão VISTO ----
+  const seenBtn = card.querySelector(".card-seen");
+  if (seenBtn) {
+    seenBtn.addEventListener("click", e => {
+      e.stopPropagation();
+      let nowSeen;
+      if (item.id && item.id.startsWith("seed-")) {
+        nowSeen = toggleSeenFor(item.id);
+      } else if (item.id) {
+        item.seen = !item.seen;
+        nowSeen = item.seen;
+        updateSavedField(item.id, "seen", nowSeen);
+      }
+      card.classList.toggle("is-seen", nowSeen);
+      seenBtn.classList.toggle("is-seen", nowSeen);
+      seenBtn.title = nowSeen ? "marcar como não visto" : "marcar como visto";
+      seenBtn.innerHTML = nowSeen ? EYE_CLOSED_SVG : EYE_SVG;
+      if (!localStorage.getItem("vault.seenTip")) {
+        localStorage.setItem("vault.seenTip", "1");
+        showHintBalloon(seenBtn, nowSeen ? "<strong>Marcado como visto</strong> — o card fica mais discreto." : "Desmarcado — o card voltou ao normal.");
+      }
+    });
+  }
+
+  // ---- EXPAND card individual no modo compacto — com animação de height ----
+  const expandHandler = e => {
+    if (viewMode !== "compact") return;
+    if (e.target.closest("button, a, input, textarea, [contenteditable]")) return;
+    const isExpanded = card.classList.contains("is-expanded");
+    const from = card.offsetHeight;
+    if (isExpanded) {
+      card.classList.remove("is-expanded");
+    } else {
+      card.classList.add("is-expanded");
+    }
+    const to = card.offsetHeight;
+    card.style.height = from + "px";
+    card.classList.add("is-animating");
+    card.style.transition = "height 300ms cubic-bezier(.2,.85,.25,1)";
+    card.offsetHeight;
+    card.style.height = to + "px";
+    setTimeout(() => {
+      card.style.height = "";
+      card.style.transition = "";
+      card.classList.remove("is-animating");
+      if (!isExpanded) fitReels();
+    }, 300);
+  };
+  if (isTouch) {
+    card.addEventListener("click", expandHandler);
+  } else {
+    card.addEventListener("dblclick", expandHandler);
+  }
+
+  // ---- DRAG para reordenar (só modo compacto) ----
+  if (viewMode === "compact") card.classList.add("is-draggable");
 
   // imagem/print: clicar abre em tela cheia (lightbox), respeitando o aspect ratio
   const thumbImg = card.querySelector(".card-thumb-img img");
@@ -880,6 +968,7 @@ function currentItems() {
   const subOv = loadSubOverrides();
   const titleOv = loadJSON("vault.titleov", {});
   const bodyOv = loadJSON("vault.bodyov", {});
+  const seenSet = loadSeen();
   const userItems = loadSaved().map(i => ({ ...i, day: "hoje" }));
   const seeds = VAULT_ITEMS
     .map((i, idx) => ({ ...i, id: `seed-${idx}` }))
@@ -887,7 +976,9 @@ function currentItems() {
     .map(i => subOv[i.id] ? { ...i, subcat: subOv[i.id] } : i)
     .map(i => titleOv[i.id] !== undefined ? { ...i, title: titleOv[i.id] } : i)
     .map(i => bodyOv[i.id] !== undefined ? { ...i, body: bodyOv[i.id] } : i)
-    .filter(i => !deleted.includes(i.id));
+    .filter(i => !deleted.includes(i.id))
+    .map(i => ({ ...i, seen: seenSet.has(i.id) }));
+  // seed items usam seenSet; saved items têm seen persistido diretamente no objeto
   return [...userItems, ...seeds];
 }
 
@@ -1165,9 +1256,221 @@ function toggleViewMode() {
   viewMode = viewMode === "compact" ? "full" : "compact";
   localStorage.setItem(VIEW_KEY, viewMode);
   applyViewMode();
+  feed.querySelectorAll(".card").forEach(c => {
+    if (viewMode === "compact") {
+      c.classList.add("is-draggable");
+    } else {
+      c.classList.remove("is-draggable", "is-expanded");
+      c.style.height = "";
+      c.style.transition = "";
+    }
+  });
+  // toast educativo ao entrar no modo compacto pela primeira vez
+  if (viewMode === "compact" && !localStorage.getItem("vault.compactTip")) {
+    localStorage.setItem("vault.compactTip", "1");
+    showHintBalloon(document.querySelector(".chip-view"), "Você está no <strong>modo compacto</strong>. Clique duas vezes num card (ou toque, no celular) para expandir.");
+  }
   renderCats();
-  if (viewMode === "full") fitReels(); // re-escala os reels ao voltar ao normal
+  if (viewMode === "full") fitReels();
 }
+
+/* ---------- toast global ---------- */
+function showToast(msg, duration = 3000, anchor = null) {
+  document.querySelector(".vault-toast")?.remove();
+  const t = document.createElement("div");
+  t.className = "vault-toast";
+  t.textContent = msg;
+  document.body.appendChild(t);
+  if (anchor) {
+    const r = anchor.getBoundingClientRect();
+    t.style.top    = (r.bottom + 10) + "px";
+    t.style.left   = (r.left + r.width / 2) + "px";
+    t.style.bottom = "";
+    Object.assign(t.style, { transform: "translateX(-50%) translateY(-8px)", opacity: "0", transition: "opacity .22s, transform .22s cubic-bezier(.2,.85,.25,1)" });
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      t.style.transform = "translateX(-50%) translateY(0)";
+      t.style.opacity = "1";
+    }));
+  } else {
+    requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add("is-in")));
+  }
+  setTimeout(() => {
+    t.style.opacity = "0";
+    t.classList.remove("is-in");
+    setTimeout(() => t.remove(), 320);
+  }, duration);
+}
+
+/* ---------- drag para reordenar (só modo compacto) ---------- */
+function initDrag() {
+  const EASE = "cubic-bezier(.2,.85,.25,1)";
+  let dragging = null, placeholder = null;
+  let offX = 0, offY = 0;
+  let lastOver = null;
+
+  function snapAll() {
+    const m = new Map();
+    feed.querySelectorAll(".card.is-draggable").forEach(c => {
+      if (c !== dragging) m.set(c, c.getBoundingClientRect().top);
+    });
+    return m;
+  }
+
+  function flipOthers(before) {
+    feed.querySelectorAll(".card.is-draggable").forEach(c => {
+      if (c === dragging) return;
+      const prev = before.get(c);
+      if (prev === undefined) return;
+      const dy = prev - c.getBoundingClientRect().top;
+      if (Math.abs(dy) < 1) return;
+      c.style.transition = "none";
+      c.style.transform = `translateY(${dy}px)`;
+      c.offsetHeight;
+      c.style.transition = `transform 220ms ${EASE}`;
+      c.style.transform = "";
+    });
+  }
+
+  function movePlaceholder(clientY) {
+    const cards = [...feed.querySelectorAll(".card.is-draggable")].filter(c => c !== dragging);
+    let target = null;
+    for (const c of cards) {
+      const r = c.getBoundingClientRect();
+      if (clientY < r.top + r.height / 2) { target = c; break; }
+    }
+    if (target === lastOver) return;
+    lastOver = target;
+    const before = snapAll();
+    if (target) feed.insertBefore(placeholder, target);
+    else feed.appendChild(placeholder);
+    flipOthers(before);
+  }
+
+  function startDrag(card, clientX, clientY) {
+    if (viewMode !== "compact") return;
+    dragging = card;
+    lastOver = null;
+    const r = card.getBoundingClientRect();
+    offX = clientX - r.left;
+    offY = clientY - r.top;
+
+    // placeholder INVISÍVEL — mantém espaço no fluxo
+    placeholder = document.createElement("div");
+    placeholder.style.cssText = `height:${r.height}px;pointer-events:none;`;
+    feed.insertBefore(placeholder, card);
+
+    // card real fica fixed e segue o mouse
+    Object.assign(card.style, {
+      position: "fixed",
+      left: r.left + "px",
+      top: r.top + "px",
+      width: r.width + "px",
+      zIndex: "800",
+      boxShadow: "0 18px 44px rgba(0,0,0,.4)",
+      transform: "scale(1.02)",
+      transformOrigin: "center",
+      transition: "box-shadow .15s, transform .15s",
+      margin: "0",
+    });
+    card.classList.add("is-dragging");
+  }
+
+  function moveCard(clientX, clientY) {
+    if (!dragging) return;
+    dragging.style.left = (clientX - offX) + "px";
+    dragging.style.top  = (clientY - offY) + "px";
+    movePlaceholder(clientY);
+  }
+
+  function endDrag() {
+    if (!dragging || !placeholder) return;
+    const targetR = placeholder.getBoundingClientRect();
+    dragging.style.transition = `left 260ms ${EASE}, top 260ms ${EASE}, transform 260ms ${EASE}, box-shadow 200ms`;
+    dragging.style.left      = targetR.left + "px";
+    dragging.style.top       = targetR.top  + "px";
+    dragging.style.transform = "scale(1)";
+    dragging.style.boxShadow = "";
+    const before = snapAll();
+    feed.insertBefore(dragging, placeholder);
+    placeholder.remove(); placeholder = null;
+    flipOthers(before);
+    setTimeout(() => {
+      if (!dragging) return;
+      dragging.classList.remove("is-dragging");
+      Object.assign(dragging.style, {
+        position: "", left: "", top: "", width: "",
+        zIndex: "", boxShadow: "", transform: "",
+        transformOrigin: "", transition: "", margin: ""
+      });
+      feed.querySelectorAll(".card.is-draggable").forEach(c => {
+        c.style.transition = ""; c.style.transform = "";
+      });
+      const order = [...feed.querySelectorAll(".card")].map(c => c.dataset.id).filter(Boolean);
+      saveOrder(order);
+      dragging = null; lastOver = null;
+    }, 260);
+  }
+
+  function cancelDrag() {
+    if (!dragging) return;
+    dragging.classList.remove("is-dragging");
+    Object.assign(dragging.style, {
+      position: "", left: "", top: "", width: "",
+      zIndex: "", boxShadow: "", transform: "",
+      transformOrigin: "", transition: "", margin: ""
+    });
+    placeholder?.remove(); placeholder = null;
+    feed.querySelectorAll(".card.is-draggable").forEach(c => { c.style.transition = ""; c.style.transform = ""; });
+    dragging = null; lastOver = null;
+  }
+
+  // ---- Desktop (mouse) ----
+  feed.addEventListener("mousedown", e => {
+    const card = e.target.closest(".card.is-draggable");
+    if (!card || e.button !== 0) return;
+    if (e.target.closest("button, a, input, textarea, [contenteditable]")) return;
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY;
+    let dragStarted = false;
+    const onMove = ev => {
+      if (dragStarted) { moveCard(ev.clientX, ev.clientY); return; }
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      if (Math.sqrt(dx * dx + dy * dy) > 8) {
+        startDrag(card, ev.clientX, ev.clientY);
+        dragStarted = true;
+      }
+    };
+    const onUp = () => { if (dragStarted) endDrag(); cleanup(); };
+    const cleanup = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
+
+  // ---- Touch (mobile) ----
+  let touchTimer = null;
+  feed.addEventListener("touchstart", e => {
+    if (viewMode !== "compact") return;
+    const card = e.target.closest(".card.is-draggable");
+    if (!card || e.target.closest("button, a, input, textarea, [contenteditable]")) return;
+    const t = e.touches[0];
+    touchTimer = setTimeout(() => startDrag(card, t.clientX, t.clientY), 250);
+  }, { passive: true });
+
+  feed.addEventListener("touchmove", e => {
+    clearTimeout(touchTimer);
+    if (!dragging) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    moveCard(t.clientX, t.clientY);
+  }, { passive: false });
+
+  feed.addEventListener("touchend", () => { clearTimeout(touchTimer); endDrag(); });
+  feed.addEventListener("touchcancel", () => { clearTimeout(touchTimer); cancelDrag(); });
+} // fim initDrag
+
 function filtersActive() {
   return filterType !== "all" || filterPeriod !== "all";
 }
@@ -1418,19 +1721,21 @@ function openCatMenu(card, item, anchor) {
   const menu = document.createElement("div");
   menu.className = "cat-menu";
 
-  // seção de subtag: só faz sentido se o item tem uma categoria
-  const existingSubs = item.cat ? subcatsOf(item.cat) : [];
-  const subSection = item.cat ? `
-    <div class="cat-sub-head mono">subtag em ${item.cat}</div>
-    ${existingSubs.map(s => `<button class="sub-option${s === item.subcat ? " is-current" : ""}" data-sub="${s}">${s}</button>`).join("")}
-    ${item.subcat ? `<button class="sub-option sub-none" data-sub="">— sem subtag</button>` : ""}
-    <div class="cat-new">
-      <input type="text" class="sub-input" placeholder="nova subtag…" maxlength="24">
-      <button class="sub-create">criar</button>
-    </div>` : "";
+  // constrói HTML da seção de subtag (reconstruída ao trocar de categoria)
+  function buildSubSection(cat, currentSub) {
+    if (!cat) return "";
+    const subs = subcatsOf(cat);
+    return `<div class="sub-section-inner">
+      <div class="cat-sub-head mono">subtag em ${cat}</div>
+      ${subs.map(s => `<button class="sub-option${s === currentSub ? " is-current" : ""}" data-sub="${s}">${s}</button>`).join("")}
+      ${currentSub ? `<button class="sub-option sub-none" data-sub="">— sem subtag</button>` : ""}
+      <div class="cat-new">
+        <input type="text" class="sub-input" placeholder="nova subtag…" maxlength="24">
+        <button class="sub-create">criar</button>
+      </div>
+    </div>`;
+  }
 
-  // só categorias que existem (com itens) — inclui a do próprio item;
-  // categorias vazias não poluem o menu, criam-se pelo campo abaixo
   const cats = [...new Set([...presentCats(), item.cat].filter(Boolean))];
   menu.innerHTML = `
     <div class="cat-sub-head mono">categoria</div>
@@ -1439,50 +1744,88 @@ function openCatMenu(card, item, anchor) {
       <input type="text" placeholder="nova categoria…" maxlength="24">
       <button class="cat-create">criar</button>
     </div>
-    ${subSection}`;
+    <div class="sub-section">${buildSubSection(item.cat, item.subcat)}</div>`;
 
   card.classList.add("has-open-menu");
-  const closeMenu = () => { menu.remove(); card.classList.remove("has-open-menu"); };
 
   menu.addEventListener("click", e => {
     const opt = e.target.closest(".cat-option");
-    if (opt) { setItemCat(item, opt.dataset.cat, card); closeMenu(); return; }
+    if (opt) {
+      const newCat = opt.dataset.cat;
+      // Fix 4: trocar tag zera subtag
+      setItemSubcat(item, null, card);
+      setItemCat(item, newCat, card);
+      // atualiza estado visual das opções de categoria
+      menu.querySelectorAll(".cat-option").forEach(b =>
+        b.classList.toggle("is-current", b.dataset.cat === newCat));
+      // Fix 3: mantém menu aberto e reconstrói seção de subtag para a nova tag
+      menu.querySelector(".sub-section").innerHTML = buildSubSection(newCat, null);
+      rewireSubInput();
+      return; // NÃO fecha o menu
+    }
     const sub = e.target.closest(".sub-option");
     if (sub) { setItemSubcat(item, sub.dataset.sub, card); closeMenu(); }
   });
 
-  const input = menu.querySelector('input:not(.sub-input)');
-  const create = () => {
-    const name = input.value.trim().toLowerCase();
-    if (!name) return;
-    setItemCat(item, name, card);
-    closeMenu();
-  };
-  menu.querySelector(".cat-create").addEventListener("click", create);
-  input.addEventListener("keydown", e => { if (e.key === "Enter") create(); });
-  // auto-save: ao sair do campo sem clicar criar, a tag é criada para o subtag funcionar
-  input.addEventListener("blur", () => {
-    const name = input.value.trim().toLowerCase();
-    if (!name || name === item.cat) return;
-    setItemCat(item, name, card);
-    const head = menu.querySelector(".cat-sub-head");
-    if (head) head.textContent = `subtag em ${name}`;
-  });
-
-  // criar subtag
-  const subInput = menu.querySelector(".sub-input");
-  if (subInput) {
+  // reconecta eventos do sub-input após rebuild da sub-section
+  function rewireSubInput() {
+    const si = menu.querySelector(".sub-input");
+    if (!si) return;
     const createSub = () => {
-      const name = subInput.value.trim().toLowerCase();
+      const name = si.value.trim().toLowerCase();
       if (!name) return;
       setItemSubcat(item, name, card);
       closeMenu();
     };
     menu.querySelector(".sub-create").addEventListener("click", createSub);
-    subInput.addEventListener("keydown", e => { if (e.key === "Enter") createSub(); });
+    si.addEventListener("keydown", e => { if (e.key === "Enter") createSub(); });
   }
+  rewireSubInput();
 
-  card.querySelector(".card-top-right").appendChild(menu);
+  const input = menu.querySelector('input:not(.sub-input)');
+  const create = () => {
+    const name = input.value.trim().toLowerCase();
+    if (!name) return;
+    setItemSubcat(item, null, card); // nova cat via campo → zera subtag
+    setItemCat(item, name, card);
+    // atualiza e reconstrói
+    menu.querySelectorAll(".cat-option").forEach(b =>
+      b.classList.toggle("is-current", b.dataset.cat === name));
+    menu.querySelector(".sub-section").innerHTML = buildSubSection(name, null);
+    rewireSubInput();
+    input.value = "";
+  };
+  menu.querySelector(".cat-create").addEventListener("click", create);
+  input.addEventListener("keydown", e => { if (e.key === "Enter") create(); });
+  input.addEventListener("blur", () => {
+    const name = input.value.trim().toLowerCase();
+    if (!name || name === item.cat) return;
+    setItemSubcat(item, null, card);
+    setItemCat(item, name, card);
+    menu.querySelector(".sub-section").innerHTML = buildSubSection(name, null);
+    rewireSubInput();
+  });
+
+  // porta o menu para o body — evita overflow:hidden e transforms do card
+  document.body.appendChild(menu);
+  const placeMenu = () => {
+    const chip = card.querySelector(".card-cat");
+    const r = chip ? chip.getBoundingClientRect() : card.getBoundingClientRect();
+    menu.style.top  = (r.bottom + 6) + "px";
+    menu.style.left = Math.max(8, Math.min(r.left, innerWidth - menu.offsetWidth - 8)) + "px";
+    menu.style.zIndex = "9999";
+  };
+  placeMenu();
+  window.addEventListener("scroll", placeMenu, { passive: true });
+  window.addEventListener("resize", placeMenu);
+
+  const closeMenu = () => {
+    menu.remove();
+    card.classList.remove("has-open-menu");
+    window.removeEventListener("scroll", placeMenu);
+    window.removeEventListener("resize", placeMenu);
+  };
+
   input.focus({ preventScroll: true });
   // no celular, centraliza o menu na tela pro teclado não cobrir
   if (isTouch) setTimeout(() => menu.scrollIntoView({ behavior: "smooth", block: "center" }), 60);
@@ -1814,9 +2157,11 @@ function showTip(card, item) {
   // empilhamento — dentro dele a tooltip ficaria atrás dos cards vizinhos
   document.body.appendChild(tip);
   const place = () => {
-    const r = card.getBoundingClientRect();
-    tip.style.top = `${r.top + 12}px`;
-    tip.style.left = `${Math.min(r.right - 12, innerWidth - 12)}px`;
+    const anchor = card.querySelector(".card-cat") || card;
+    const r = anchor.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.right, innerWidth - 8));
+    tip.style.top  = `${r.bottom + 8}px`;
+    tip.style.left = `${left}px`;
   };
   place();
   addEventListener("scroll", place, { passive: true });
@@ -1832,6 +2177,37 @@ function showTip(card, item) {
   tip.querySelector(".tip-later").onclick = close;
   tip.querySelector(".tip-off").onclick = () => { localStorage.setItem(TIPS_OFF_KEY, "1"); close(); };
   setTimeout(close, 13000); // some sozinha se ignorada
+}
+
+// balão educativo simples (mesmo visual da .tip), ancorado num botão clicado
+function showHintBalloon(anchorEl, msg, duration = 6000) {
+  if (!anchorEl) return;
+  document.querySelector(".tip")?.remove();
+  const tip = document.createElement("div");
+  tip.className = "tip tip-hint";
+  tip.innerHTML = `<p>${msg}</p>`;
+  document.body.appendChild(tip);
+  const place = () => {
+    const r = anchorEl.getBoundingClientRect();
+    // a seta (::after) fica a ~28px da borda direita do balão; alinhar a ponta
+    // da seta ao CENTRO do botão clicado para o balão "sair" dele
+    const cx = (r.left + r.right) / 2;
+    const left = Math.max(150, Math.min(cx + 28, innerWidth - 8));
+    tip.style.top  = `${r.bottom + 10}px`;
+    tip.style.left = `${left}px`;
+  };
+  place();
+  addEventListener("scroll", place, { passive: true });
+  addEventListener("resize", place);
+  requestAnimationFrame(() => tip.classList.add("is-in"));
+  const close = () => {
+    tip.classList.remove("is-in");
+    removeEventListener("scroll", place);
+    removeEventListener("resize", place);
+    setTimeout(() => tip.remove(), 250);
+  };
+  tip.addEventListener("click", close);
+  setTimeout(close, duration);
 }
 
 // textarea: cresce com o texto
@@ -2100,22 +2476,23 @@ form.addEventListener("submit", async e => {
   }
 
   const cleanDesc = cleanDescription(meta?.description);
-  // Facebook grupos/conteúdo privado: sem embed, sem título real → avisa o usuário
+  // Facebook grupos/conteúdo privado: sem embed e sem título real (foi scrubado como genérico)
   const isFbPrivate = source === "facebook" && !embed && !meta?.title;
   const newItem = {
     id: `v${Date.now()}`,
     source, cat,
     type: "video",
-    title: fallbackTitle || smartTitle(meta),
+    title: isFbPrivate ? "Grupo ou conteúdo privado" : (fallbackTitle || smartTitle(meta)),
     body: isFbPrivate
-      ? "Grupo ou conteúdo privado — o preview não está disponível. Use 'abrir original' para ver."
+      ? "O preview não está disponível. Use 'abrir original' para ver."
       : fallbackBody || (cleanDesc
         ? cleanDesc.slice(0, 150) + (cleanDesc.length > 150 ? "…" : "")
         : ""),
     stats: parseSocialStats(meta?.description) || parseSocialStats(meta?.title),
     author: meta?.author || null,
     embed,
-    image: fallbackImage || meta?.image || null,
+    isPrivate: isFbPrivate || undefined,
+    image: isFbPrivate ? null : (fallbackImage || meta?.image || null),
     thumb: null,
     time: "guardado agora mesmo",
     url: url.replace(/^https?:\/\//, "")
@@ -2210,8 +2587,25 @@ async function downloadEmbedReport(item, card) {
   setTimeout(() => { status.innerHTML = ""; }, 4000);
 }
 
+/* ---------- Threads auto-height via postMessage ----------
+   O iframe do Threads é cross-origin — não dá pra medir o conteúdo diretamente.
+   O Threads (assim como Instagram) manda mensagens postMessage com a altura real.
+   Escutamos e ajustamos o iframe correspondente. */
+window.addEventListener("message", e => {
+  if (!e.data) return;
+  let d = e.data;
+  if (typeof d === "string") { try { d = JSON.parse(d); } catch { return; } }
+  // formato do Threads/Instagram: { type:"MEASURE", content:{ height:N } }
+  const h = d?.content?.height || d?.height;
+  if (!h || h < 50) return;
+  document.querySelectorAll(".embed-threads iframe").forEach(frame => {
+    try { if (frame.contentWindow === e.source) frame.style.height = h + "px"; } catch {}
+  });
+});
+
 /* ---------- init ---------- */
 applyViewMode();  // restaura modo compacto/timeline salvo
 buildFeed();      // já chama renderCats() internamente
+initDrag();       // ativa drag-to-reorder no modo compacto
 updateTrashChip();
 refreshAiToggle();

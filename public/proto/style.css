@@ -322,6 +322,8 @@ body[data-theme="dark"] .theme-switch .ts-knob {
 .note-body {
   font-family: var(--body);
   font-size: 17.5px;
+  overflow-wrap: break-word;
+  word-break: break-word;
   line-height: 1.6;
   color: var(--ink);
 }
@@ -916,6 +918,8 @@ body[data-theme="dark"] .cat-sub-head:not(:first-child) { border-color: rgba(236
 }
 .tip strong { color: var(--accent); font-weight: 600; }
 
+.tip-hint p { margin-bottom: 0; }
+
 .tip-actions { display: flex; gap: 8px; }
 
 .tip-go, .tip-later {
@@ -938,12 +942,13 @@ body[data-theme="dark"] .cat-sub-head:not(:first-child) { border-color: rgba(236
   margin-top: 10px;
   background: none;
   border: none;
-  color: rgba(244,239,230,.5);
+  color: var(--paper);
+  opacity: .45;
   cursor: pointer;
   padding: 0;
   font-size: 10px;
 }
-.tip-off:hover { color: var(--paper); }
+.tip-off:hover { opacity: .9; }
 
 /* lixeira */
 .card-trash { opacity: .9; }
@@ -1059,7 +1064,7 @@ body[data-theme="dark"] .cat-sub-head:not(:first-child) { border-color: rgba(236
   border-radius: 18px;
   box-shadow: var(--shadow);
   padding: 16px 16px;
-  transition: transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s;
+  transition: transform .35s cubic-bezier(.2,.8,.2,1), box-shadow .35s, opacity .45s cubic-bezier(.2,.85,.25,1);
   animation: rise .6s cubic-bezier(.2,.8,.2,1) both;
 }
 
@@ -1227,11 +1232,11 @@ body[data-theme="dark"] .source-web .source-icon { color: #d2a542; }
 
 .card-cat:hover { box-shadow: 0 0 0 1.5px currentColor; }
 
-/* menu de troca de categoria */
+/* menu de troca de categoria — portado para body, posicionado via JS */
 .cat-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
+  position: fixed;
+  top: 0;
+  left: 0;
   z-index: 20;
   background: var(--card);
   border-radius: 14px;
@@ -1240,7 +1245,8 @@ body[data-theme="dark"] .source-web .source-icon { color: #d2a542; }
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 190px;
+  width: 260px;
+  max-width: calc(100vw - 16px);
 }
 
 .cat-option {
@@ -1348,12 +1354,14 @@ body[data-theme="dark"] .cat-create, body[data-theme="dark"] .sub-create { color
   font-family: var(--serif);
   font-size: 24px;
   font-weight: 600;
+  overflow-wrap: break-word;
+  word-break: break-word;
   letter-spacing: -.015em;
   line-height: 1.2;
   margin-bottom: 8px;
 }
 
-.card-body { color: var(--ink-soft); font-size: 16.5px; }
+.card-body { color: var(--ink-soft); font-size: 16.5px; overflow-wrap: break-word; word-break: break-word; }
 
 /* descrição editável: cursor de texto e placeholder quando vazia */
 .card-body[data-editable-body] { cursor: text; border-radius: 6px; transition: background .2s; min-height: 1em; }
@@ -1546,7 +1554,21 @@ body[data-theme="dark"] .cat-create, body[data-theme="dark"] .sub-create { color
 .embed-tweet { aspect-ratio: auto; background: transparent; }
 .embed-tweet iframe { width: 100%; height: 320px; transition: height .2s; }
 
-/* threads: altura menor (texto curto cabe; posts com imagem cortam — usar "abrir original") */
+/* card de conteúdo privado (Facebook grupos, links restritos) */
+.card-private-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  margin: 4px 0 12px;
+}
+.card-private-icon svg { width: 26px; height: 26px; }
+
+/* threads: altura inicial — postMessage listener em app.js ajusta conforme o conteúdo real */
 .embed-threads { aspect-ratio: auto; background: transparent; }
 .embed-threads iframe { width: 100%; height: 350px; }
 
@@ -1720,6 +1742,121 @@ body[data-theme="dark"] .cat-create, body[data-theme="dark"] .sub-create { color
 
 /* hidden by filter — !important vence a especificidade de body.view-compact .card { display:grid } */
 .card.is-hidden { display: none !important; }
+
+/* ---- VISTO ---- */
+.card-seen {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  color: var(--ink-faint);
+  opacity: .35;
+  transition: opacity .2s, color .2s;
+  display: inline-flex;
+  align-items: center;
+}
+.card-seen svg { width: 15px; height: 15px; }
+.card-seen:hover { opacity: .7; }
+.card-seen.is-seen { color: var(--ink-faint); opacity: .55; }
+
+/* card marcado como visto: !important para vencer o animation-fill-mode do @keyframes rise */
+.card.is-seen { opacity: .4 !important; }
+.card.is-seen:hover { opacity: .75 !important; }
+
+/* no modo TIMELINE, card visto fica compacto também */
+body:not(.view-compact) .card.is-seen {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "top top" "thumb title" "thumb body" "foot foot";
+  column-gap: 13px;
+  align-items: center;
+  padding: 12px 15px;
+}
+body:not(.view-compact) .card.is-seen .card-top    { grid-area: top; }
+body:not(.view-compact) .card.is-seen .card-cthumb { grid-area: thumb; align-self: center; display: block; width: 58px; height: 58px; border-radius: 10px; overflow: hidden; background: var(--paper-deep); }
+body:not(.view-compact) .card.is-seen .card-cthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+body:not(.view-compact) .card.is-seen .card-title  { grid-area: title; font-size: 16px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body:not(.view-compact) .card.is-seen .card-body   { grid-area: body; margin: 2px 0 0; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body:not(.view-compact) .card.is-seen .card-footer { grid-area: foot; }
+body:not(.view-compact) .card.is-seen .card-embed,
+body:not(.view-compact) .card.is-seen .card-thumb  { display: none; }
+
+/* ---- EXPAND card individual no modo compacto ---- */
+body.view-compact .card.is-expanded {
+  display: block !important;
+}
+body.view-compact .card.is-expanded .card-title {
+  font-size: 22px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  margin-bottom: 6px;
+}
+body.view-compact .card.is-expanded .card-body,
+body.view-compact .card.is-expanded .card-quote {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  font-size: 16px;
+  margin-top: 4px;
+}
+body.view-compact .card.is-expanded .card-embed,
+body.view-compact .card.is-expanded .card-thumb { display: block; }
+body.view-compact .card.is-expanded .card-cthumb { display: none; }
+body.view-compact .card.is-expanded .note-body { white-space: normal; overflow: visible; }
+
+/* ---- SEEN LABEL ---- */
+.seen-label {
+  font-size: 11px;
+  color: var(--ink-faint);
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: opacity .4s cubic-bezier(.2,.85,.25,1), max-width .4s cubic-bezier(.2,.85,.25,1);
+  vertical-align: middle;
+}
+.card.is-seen .seen-label { opacity: 1; max-width: 140px; }
+
+/* ---- DRAG para reordenar ---- */
+.card.is-dragging { pointer-events: none; will-change: left, top; }
+body.view-compact .card.is-draggable { cursor: grab; }
+body.view-compact .card.is-draggable:active { cursor: grabbing; }
+.drag-placeholder {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 14px;
+  margin: 0;
+  transition: height .15s;
+}
+
+/* ---- TOAST global ---- */
+.vault-toast {
+  position: fixed;
+  top: 22px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-14px);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 13.5px;
+  font-family: inherit;
+  padding: 10px 18px;
+  border-radius: 99px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transition: opacity .22s, transform .22s cubic-bezier(.2,.85,.25,1);
+  box-shadow: 0 6px 24px rgba(0,0,0,.22);
+}
+.vault-toast.is-in {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+
+/* overflow:hidden só durante a animação de expand/collapse */
+body.view-compact .card.is-animating { overflow: hidden; }
 
 /* ============ endcap ============ */
 .endcap {
