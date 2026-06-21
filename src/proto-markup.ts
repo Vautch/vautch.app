@@ -61,14 +61,19 @@ export const BODY_HTML = `
   <div class="intake-status mono" id="intakeStatus" aria-live="polite"></div>
 </section>
 
-<div class="topbar-meta mono">47 itens guardados</div>
+<div class="topbar-meta mono"></div>
 
 <div class="filterbar" id="filterbar">
-  <nav class="filters" id="filters">
-    <!-- tudo + chips de categoria ranqueados (rolam no mobile) -->
-  </nav>
+  <div class="filters-line">
+    <nav class="filters" id="filters">
+      <!-- tudo + chips de categoria ranqueados (rolam no mobile) -->
+    </nav>
+    <div class="filters-more" id="filtersMore">
+      <!-- "+N" fixo, na MESMA linha das tags (não rola junto com elas) -->
+    </div>
+  </div>
   <div class="filter-actions" id="filterActions">
-    <!-- "+mais" e lixeira (fixos, não rolam no mobile) -->
+    <!-- view, filtro e lixeira (fixos, não rolam no mobile) -->
   </div>
 </div>
 

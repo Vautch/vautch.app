@@ -21,7 +21,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=Spline+Sans+Mono:wght@400;500&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap"
           rel="stylesheet"
         />
         <link rel="stylesheet" href="/proto/style.css" />
@@ -29,7 +29,7 @@ export default function RootLayout({
             refresh. beforeInteractive injeta no HTML antes da hidratação;
             seta no <html> (sempre existe). Default: light no 1º acesso. */}
         <Script id="vautch-theme" strategy="beforeInteractive">
-          {`(function(){try{var t=localStorage.getItem('vault.theme')||'light';document.documentElement.dataset.theme=t}catch(e){}})()`}
+          {`(function(){try{var t=localStorage.getItem('vault.theme')||'light';var r=document.documentElement;r.dataset.theme=t;r.style.background=(t==='dark'?'#131316':'#f4efe6');r.classList.add('theme-init');}catch(e){}})()`}
         </Script>
       </head>
       <body>{children}</body>

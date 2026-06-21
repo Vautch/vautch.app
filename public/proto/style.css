@@ -3,6 +3,14 @@
    papel quente · serifa expressiva · scrapbook vivo
    ============================================ */
 
+/* anti-FOUC: enquanto a página inicializa (classe posta pelo script de tema no
+   <head>), nenhuma transição roda — assim o tema salvo aparece já no lugar, sem
+   o switch "andar" do claro→escuro nem piscar. O JS remove .theme-init após o
+   1º paint, devolvendo as transições. */
+html.theme-init *,
+html.theme-init *::before,
+html.theme-init *::after { transition: none !important; }
+
 :root {
   --paper: #f4efe6;
   --paper-deep: #ece5d8;
@@ -24,9 +32,12 @@
   --rose: #8d3b63;
   --rose-soft: #ead7e0;
   --smoke: 150, 139, 120;
-  --serif: "Fraunces", serif;
-  --body: "Newsreader", serif;
-  --mono: "Spline Sans Mono", monospace;
+  /* fonte única do app: Open Sans em tudo (títulos, corpo, tags, rótulos,
+     placeholders). Os 3 aliases continuam existindo p/ não reescrever cada
+     regra — todos apontam pra Open Sans. */
+  --serif: "Open Sans", system-ui, sans-serif;
+  --body: "Open Sans", system-ui, sans-serif;
+  --mono: "Open Sans", system-ui, sans-serif;
 }
 
 /* tema escuro: carvão neutro com tinta creme — não marrom */
@@ -164,7 +175,7 @@ body.is-empty .topbar { padding-top: 0; }
   justify-content: center;
   align-items: center;
   line-height: 1;
-  margin-top: 60px;   /* respiro pro topbar-row fixo no topo */
+  margin-top: 92px;   /* respiro generoso entre o topo da página e o logo */
   position: relative;
   z-index: 2;
   cursor: default;    /* h1 em si não é clicável */
@@ -188,7 +199,7 @@ html[data-theme="dark"] .logo-dark { display: block; }
   font-style: italic;
   font-size: 18px;
   color: var(--ink-soft);
-  margin-top: 16px;       /* respiro entre o logo e a tagline */
+  margin-top: 34px;       /* respiro entre o logo e a tagline */
 }
 
 /* contagem de itens: agora vem DEPOIS da barra de busca, antes das tags */
@@ -377,7 +388,7 @@ html[data-theme="dark"] .theme-switch .ts-knob {
 /* ============ intake ============ */
 .intake {
   max-width: 640px;
-  margin: 22px auto 0;
+  margin: 34px auto 0;
   padding: 0 24px;
   animation: rise .7s .12s cubic-bezier(.2,.8,.2,1) both;
 }
@@ -530,6 +541,11 @@ html[data-theme="dark"] .intake-field:focus-within {
   min-width: 0;
 }
 
+/* DESKTOP: wrapper transparente — #filters e #filtersMore fluem direto no
+   .filterbar (mesmo comportamento de antes). No mobile vira uma linha flex. */
+.filters-line { display: contents; }
+.filters-more { display: flex; gap: 8px; align-items: flex-start; }
+
 /* DESKTOP: por padrão mostra uma linha de tags; "+mais" libera as demais */
 .filters {
   max-height: 38px;
@@ -539,6 +555,9 @@ html[data-theme="dark"] .intake-field:focus-within {
 .filters.is-expanded { max-height: 320px; overflow: visible; }
 
 .chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--mono);
   font-size: 12px;
   letter-spacing: .05em;
@@ -618,6 +637,11 @@ body.view-compact .card-list,
 body.view-compact .card-report,
 body.view-compact .carousel-hint { display: none; }
 
+/* a lixeira tem estrutura própria (checkbox + restaurar/excluir) — NÃO aplicar
+   o grid compacto nela, senão os elementos caem em áreas erradas e quebram.
+   .card.card-trash p/ vencer o `body.view-compact .card{display:grid}`. */
+body.view-compact .card.card-trash { display: block; padding: 16px; }
+
 body.view-compact .feed { gap: 9px; }
 
 /* card compacto em grid: miniatura à esquerda, título + descrição (1 linha
@@ -625,12 +649,12 @@ body.view-compact .feed { gap: 9px; }
 body.view-compact .card {
   padding: 12px 15px;
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto 1fr;
   grid-template-areas:
-    "top   top"
-    "thumb title"
-    "thumb body"
-    "foot  foot";
+    "drag top   top"
+    "drag thumb title"
+    "drag thumb body"
+    "drag foot  foot";
   column-gap: 13px;
   align-items: center;
 }
@@ -689,9 +713,6 @@ body.view-compact .note-body {
   font-size: 14px;
   font-weight: 500;
   line-height: 1;
-  vertical-align: middle;
-  position: relative;
-  top: -0.5px;
 }
 .chip.is-active .chip-sub-mark { opacity: .85; }
 
@@ -1074,11 +1095,9 @@ html[data-theme="dark"] .cat-sub-head:not(:first-child) { border-color: rgba(236
   animation: rise .6s cubic-bezier(.2,.8,.2,1) both;
 }
 
-.card:nth-child(odd) { transform: rotate(-.4deg); }
-.card:nth-child(even) { transform: rotate(.35deg); }
-
+/* cards SEM rotação decorativa — ficam retos (após reordenar não embaralha a
+   inclinação). Hover sem movimento: só realça a sombra, sem "pular". */
 .card:hover {
-  transform: rotate(0deg) translateY(-4px);
   box-shadow: var(--shadow-lift);
   z-index: 2;
 }
@@ -1223,6 +1242,16 @@ html[data-theme="dark"] .source-web .source-icon { color: #d2a542; }
 .card:hover .card-del { opacity: .85; }
 .card-del:hover { background: var(--accent); color: var(--paper); opacity: 1; }
 
+/* container das tags no canto superior esquerdo */
+.card-tags {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;          /* permite o overflow:hidden truncar de verdade */
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
 .card-cat {
   font-family: var(--mono);
   font-size: 10.5px;
@@ -1234,6 +1263,12 @@ html[data-theme="dark"] .source-web .source-icon { color: #d2a542; }
   background: var(--paper-deep);   /* fallback p/ categorias criadas pelo usuário */
   color: var(--ink-soft);
   transition: box-shadow .2s;
+  /* truncamento de segurança (o JS já corta em ~26 chars) */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
 }
 
 .card-cat:hover { box-shadow: 0 0 0 1.5px currentColor; }
@@ -1336,38 +1371,44 @@ html[data-theme="dark"] .cat-create, html[data-theme="dark"] .sub-create { color
 .cat-ideias   { background: var(--paper-deep); color: var(--ink-soft); }
 .cat-moda     { background: var(--rose-soft); color: var(--rose); }
 
-/* subtag ao lado da tag, com um › de ligação */
+/* subtag ao lado da tag, ligada por um chevron (SVG .card-sep) */
 .card-subcat {
-  position: relative;
   font-family: var(--mono);
   font-size: 10.5px;
   letter-spacing: .06em;
   text-transform: uppercase;
-  padding: 4px 10px 4px 16px;
-  margin-left: 5px;
+  padding: 4px 12px;
   border-radius: 999px;
   background: var(--paper-deep);
   color: var(--ink-soft);
+  /* truncamento de segurança (o JS já corta em ~26 chars) */
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.card-subcat::before {
-  content: "›";
-  position: absolute;
-  left: 5px;
-  opacity: .6;
+/* chevron › entre tag e subtag */
+.card-sep {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+  opacity: .8;
 }
+.card-sep svg { width: 5px; height: 9px; display: block; }
 
 .card-title {
   font-family: var(--serif);
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;            /* Open Sans Bold (pedido do Paulo) */
   overflow-wrap: break-word;
   word-break: break-word;
-  letter-spacing: -.015em;
-  line-height: 1.2;
+  letter-spacing: -.01em;
+  line-height: 1.25;
   margin-bottom: 8px;
 }
 
-.card-body { color: var(--ink-soft); font-size: 16.5px; overflow-wrap: break-word; word-break: break-word; }
+.card-body { color: var(--ink-soft); font-size: 15.5px; line-height: 1.5; overflow-wrap: break-word; word-break: break-word; }
 
 /* descrição editável: cursor de texto e placeholder quando vazia */
 .card-body[data-editable-body] { cursor: text; border-radius: 6px; transition: background .2s; min-height: 1em; }
@@ -1736,56 +1777,66 @@ html[data-theme="dark"] .cat-create, html[data-theme="dark"] .sub-create { color
   /* funciona como <a> e como <button>: zera os estilos nativos do botão */
   background: none;
   border: none;
-  border-bottom: 1px solid transparent;
   padding: 0;
   cursor: pointer;
-  transition: border-color .2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: opacity .2s;
 }
+/* ícone laranja de link externo, à esquerda de "abrir original" */
+.card-link-ico { display: inline-flex; }
+.card-link-ico svg { width: 11px; height: 11px; display: block; }
 
-.card-link:hover { border-color: var(--accent); }
+.card-link:hover { opacity: .65; text-decoration: underline; }
 .card-link:focus { outline: none; }
 .card-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+
+/* favicon do site de origem (puxado automaticamente pelo domínio) */
+.card-fav {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  object-fit: cover;
+  display: block;
+  flex: 0 0 auto;
+}
 
 /* hidden by filter — !important vence a especificidade de body.view-compact .card { display:grid } */
 .card.is-hidden { display: none !important; }
 
-/* ---- VISTO ---- */
-.card-seen {
+/* ---- botão expandir / comprimir (canto sup. direito, só no compacto) ---- */
+.card-fold {
+  display: none;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 3px 4px;
   color: var(--ink-faint);
-  opacity: .35;
+  opacity: .6;
   transition: opacity .2s, color .2s;
-  display: inline-flex;
   align-items: center;
 }
-.card-seen svg { width: 15px; height: 15px; }
-.card-seen:hover { opacity: .7; }
-.card-seen.is-seen { color: var(--ink-faint); opacity: .55; }
+body.view-compact .card-fold { display: inline-flex; }
+.card-fold:hover { opacity: 1; color: var(--accent); }
+.card-fold svg { width: 13px; height: 13px; display: block; }
 
-/* card marcado como visto: !important para vencer o animation-fill-mode do @keyframes rise */
-.card.is-seen { opacity: .4 !important; }
-.card.is-seen:hover { opacity: .75 !important; }
-
-/* no modo TIMELINE, card visto fica compacto também */
-body:not(.view-compact) .card.is-seen {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  grid-template-areas: "top top" "thumb title" "thumb body" "foot foot";
-  column-gap: 13px;
+/* ---- alça de drag (6 pontinhos), à esquerda, só no compacto ---- */
+.card-drag {
+  display: none;
+  grid-area: drag;
+  align-self: center;
   align-items: center;
-  padding: 12px 15px;
+  justify-content: center;
+  padding-right: 2px;
+  color: var(--ink-faint);
+  opacity: .5;
+  cursor: grab;
 }
-body:not(.view-compact) .card.is-seen .card-top    { grid-area: top; }
-body:not(.view-compact) .card.is-seen .card-cthumb { grid-area: thumb; align-self: center; display: block; width: 58px; height: 58px; border-radius: 10px; overflow: hidden; background: var(--paper-deep); }
-body:not(.view-compact) .card.is-seen .card-cthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-body:not(.view-compact) .card.is-seen .card-title  { grid-area: title; font-size: 16px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-body:not(.view-compact) .card.is-seen .card-body   { grid-area: body; margin: 2px 0 0; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-body:not(.view-compact) .card.is-seen .card-footer { grid-area: foot; }
-body:not(.view-compact) .card.is-seen .card-embed,
-body:not(.view-compact) .card.is-seen .card-thumb  { display: none; }
+body.view-compact .card-drag { display: flex; }
+body.view-compact .card.is-expanded .card-drag { display: none; }   /* expandido: só leitura */
+.card-drag:active { cursor: grabbing; }
+.card-drag svg { width: 9px; height: 15px; display: block; }
 
 /* ---- EXPAND card individual no modo compacto ---- */
 body.view-compact .card.is-expanded {
@@ -1811,21 +1862,18 @@ body.view-compact .card.is-expanded .card-thumb { display: block; }
 body.view-compact .card.is-expanded .card-cthumb { display: none; }
 body.view-compact .card.is-expanded .note-body { white-space: normal; overflow: visible; }
 
-/* ---- SEEN LABEL ---- */
-.seen-label {
-  font-size: 11px;
-  color: var(--ink-faint);
-  opacity: 0;
-  max-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  transition: opacity .4s cubic-bezier(.2,.85,.25,1), max-width .4s cubic-bezier(.2,.85,.25,1);
-  vertical-align: middle;
-}
-.card.is-seen .seen-label { opacity: 1; max-width: 140px; }
-
 /* ---- DRAG para reordenar ---- */
 .card.is-dragging { pointer-events: none; will-change: left, top; }
+/* Durante o reordenamento, os cards NÃO arrastados precisam que o transform do
+   FLIP (translateY) seja o único transform — por isso zeramos a rotação
+   decorativa do nth-child e o lift do hover. Sem isto, ao reverter o transform
+   o card volta pro rotate()/hover e "salta" em vez de deslizar de A→B. */
+body.is-reordering .card.is-draggable:not(.is-dragging),
+body.is-reordering .card.is-draggable:not(.is-dragging):hover {
+  transform: none;
+  box-shadow: var(--shadow);
+  z-index: auto;
+}
 body.view-compact .card.is-draggable { cursor: grab; }
 body.view-compact .card.is-draggable:active { cursor: grabbing; }
 .drag-placeholder {
@@ -1931,11 +1979,19 @@ body.view-compact .card.is-animating { overflow: hidden; }
   .chip-trash { padding: 7px 11px; }
   .chip-trash svg { vertical-align: middle; }
 
-  /* filtros: tags em UMA linha rolável; "+mais" e lixeira na linha de baixo.
-     Apertar "+mais" expande as tags em quebra de linha (mostra todas). */
+  /* filtros: linha de cima = tags roláveis + "+N" FIXO à direita (div própria,
+     não rola junto). Linha de baixo = view, filtro e lixeira.
+     Apertar "+N" expande as tags em quebra de linha (mostra todas). */
   .filterbar { flex-direction: column; align-items: center; padding: 0 14px; gap: 8px; }
-  .filters {
+  .filters-line {
+    display: flex;
     width: 100%;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .filters {
+    flex: 1 1 auto;
+    min-width: 0;
     flex-wrap: nowrap;
     overflow-x: auto;
     max-height: none;
@@ -1943,10 +1999,14 @@ body.view-compact .card.is-animating { overflow: hidden; }
        o início — então fica centralizado sem nunca esconder a 1ª tag */
     justify-content: safe center;
   }
+  .filters-more { flex: 0 0 auto; }   /* "+N"/"−" não encolhe nem rola */
   .filters.is-expanded {
     flex-wrap: wrap;
     overflow-x: visible;
     justify-content: center;
   }
+  /* expandido: as tags quebram em várias linhas DENTRO de #filters (que tem
+     flex:1); o "−" continua no topo à direita, no MESMO lugar do "+N" — a linha
+     NÃO quebra, só o #filters cresce em altura. */
   .filter-actions { flex-wrap: nowrap; justify-content: center; }
 }

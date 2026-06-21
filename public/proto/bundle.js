@@ -24,6 +24,26 @@ function detectSource(raw) {
 
 /* ---------- embed real por plataforma ---------- */
 
+// Remove parâmetros de RASTREAMENTO da URL (utm_*, ig_rid, fbclid, gclid, …)
+// preservando os FUNCIONAIS (v=, t=, list=, img_index= dos carrosséis, etc.).
+// Mantém caminho e hash. Usado antes de montar o embed (o Facebook recebe a URL
+// inteira via href=) e ao guardar a URL ("abrir original" limpo). Não muda a
+// engenharia dos embeds — IG/YouTube/etc. já extraem o ID por regex.
+const TRACKING_PARAMS = new Set(["ig_rid", "igshid", "igsh", "fbclid", "gclid", "gclsrc", "dclid", "mc_cid", "mc_eid", "_gl", "msclkid", "yclid", "twclid"]);
+function stripTracking(raw) {
+  if (!raw) return raw;
+  try {
+    const hasProto = /^https?:\/\//i.test(raw);
+    const u = new URL(hasProto ? raw : `https://${raw}`);
+    [...u.searchParams.keys()].forEach(k => {
+      const lk = k.toLowerCase();
+      if (lk.startsWith("utm_") || TRACKING_PARAMS.has(lk)) u.searchParams.delete(k);
+    });
+    const out = u.toString().replace(/\?(?=#|$)/, ""); // tira "?" pendente sem query
+    return hasProto ? out : out.replace(/^https?:\/\//, "");
+  } catch { return raw; }
+}
+
 // aspect ratio largura/altura a partir das dimensões da imagem (metadados)
 function aspectFromMeta(meta) {
   if (meta && meta.imageW && meta.imageH) return meta.imageW / meta.imageH;
@@ -34,7 +54,7 @@ function aspectFromMeta(meta) {
 // `meta` (opcional) traz o URL resolvido (links curtos) e dimensões reais do conteúdo.
 function buildEmbed(raw, meta) {
   if (!raw) return null;
-  const url = raw.trim();
+  const url = stripTracking(raw.trim());  // tira utm_*/fbclid/… antes de montar
 
   // Instagram: /p/, /reel/, /reels/, /tv/
   let m = url.match(/instagram\.com\/(?:[\w.]+\/)?(p|reels|reel|tv)\/([A-Za-z0-9_-]+)/i);
@@ -221,12 +241,24 @@ async function fetchMetadata(raw) {
 // Analisa título + descrição reais (não o URL). Heurística local por
 // enquanto — o passo seguinte é trocar por uma chamada de LLM real.
 const CATEGORY_SIGNALS = {
-  receitas: ["receita", "recipe", "cozinha", "ingrediente", "bolo", "massa", "forno", "airfryer", "fit", "lanche", "jantar", "almoço", "sobremesa", "molho", "tempero", "cooking", "food"],
-  moda: ["moda", "look", "looks", "outfit", "achados", "shein", "shopee", "roupa", "estilo", "fashion", "tendência", "vestido", "calça", "loja", "masculina", "feminina", "provador", "haul"],
-  design: ["design", "tipografia", "font", "branding", "identidade", "logo", "ui", "ux", "figma", "layout", "paleta", "designer"],
-  viagem: ["viagem", "roteiro", "destino", "praia", "trilha", "chapada", "hotel", "pousada", "passagem", "travel", "trip", "mochilão", "turismo"],
-  música: ["música", "show", "banda", "álbum", "album", "playlist", "setlist", "song", "music", "festival", "vinil", "spotify", "official video", "official audio", "clipe", "lyrics", "letra", "remaster", "ao vivo", "live session", "acústico", "cover", "feat", "dj "],
-  games: ["gameplay", "game", "jogo", "jogos", "gamer", "fps", "moba", "rpg", "steam", "playstation", "xbox", "nintendo", "twitch", "esports", "e-sports", "ranked", "patch notes", "patch", "speedrun", "boss", "loot", "trailer de jogo", "demo trailer", "indie game", "deadlock", "league of legends", "valorant", "counter-strike", "minecraft", "fortnite"]
+  receitas: ["receita", "receitas", "recipe", "cozinha", "ingrediente", "ingredientes", "bolo", "massa", "forno", "airfryer", "lanche", "jantar", "almoço", "sobremesa", "molho", "tempero", "cooking", "food", "comida", "frango", "chocolate", "panela"],
+  moda: ["moda", "look", "looks", "outfit", "achados", "shein", "shopee", "roupa", "roupas", "estilo", "fashion", "tendência", "vestido", "calça", "masculina", "feminina", "provador", "haul", "tênis", "sapato", "acessórios"],
+  design: ["design", "tipografia", "font", "fonte", "branding", "identidade", "logo", "logotipo", "ui", "ux", "figma", "layout", "paleta", "designer", "wireframe", "mockup"],
+  viagem: ["viagem", "roteiro", "destino", "praia", "trilha", "chapada", "hotel", "pousada", "passagem", "travel", "trip", "mochilão", "turismo", "viajar", "férias"],
+  música: ["música", "musica", "show", "banda", "álbum", "album", "playlist", "setlist", "song", "music", "festival", "vinil", "spotify", "official video", "official audio", "clipe", "lyrics", "letra", "remaster", "ao vivo", "live session", "acústico", "cover", "feat", "dj "],
+  games: ["gameplay", "game", "jogo", "jogos", "gamer", "fps", "moba", "rpg", "steam", "playstation", "xbox", "nintendo", "twitch", "esports", "e-sports", "ranked", "patch notes", "speedrun", "boss", "loot", "indie game", "deadlock", "league of legends", "valorant", "counter-strike", "minecraft", "fortnite"],
+  ai: ["ai", "ia", "inteligência artificial", "inteligencia artificial", "machine learning", "deep learning", "chatgpt", "gpt", "claude", "gemini", "llm", "midjourney", "stable diffusion", "openai", "anthropic", "rede neural", "neural", "modelo de linguagem", "agente", "agentes", "copilot", "perplexity"],
+  tecnologia: ["tecnologia", "tech", "software", "app", "aplicativo", "programação", "código", "developer", "dev", "javascript", "python", "react", "api", "startup", "gadget", "hardware", "computador", "linux"],
+  marketing: ["marketing", "anúncio", "anúncios", "ads", "tráfego", "copywriting", "copy", "funil", "lançamento", "branding", "engajamento", "conversão", "seo", "social media", "audiência"],
+  negócios: ["negócio", "negócios", "empreender", "empreendedorismo", "vendas", "venda", "faturamento", "lucro", "cliente", "clientes", "gestão", "produtividade", "liderança", "carreira"],
+  finanças: ["finanças", "financeiro", "investir", "investimento", "investimentos", "dinheiro", "renda", "bolsa", "ações", "cripto", "bitcoin", "economia", "juros", "poupança", "dividendos"],
+  fitness: ["treino", "academia", "musculação", "exercício", "exercícios", "fit", "fitness", "hipertrofia", "cardio", "corrida", "agachamento", "workout", "gym"],
+  saúde: ["saúde", "saude", "bem-estar", "sono", "meditação", "ansiedade", "terapia", "nutrição", "dieta", "vitamina", "mental", "autocuidado"],
+  fotografia: ["fotografia", "foto", "fotos", "câmera", "camera", "lente", "lightroom", "fotógrafo", "retrato", "ensaio", "iso", "obturador"],
+  arte: ["arte", "ilustração", "ilustrador", "desenho", "pintura", "artista", "galeria", "escultura", "aquarela", "sketch"],
+  humor: ["humor", "meme", "memes", "engraçado", "comédia", "piada", "stand-up", "standup"],
+  pets: ["pet", "pets", "cachorro", "gato", "filhote", "adestramento", "ração", "veterinário", "animal"],
+  carros: ["carro", "carros", "automóvel", "motor", "turbo", "review do carro", "test drive", "suv", "elétrico", "moto"]
 };
 
 /* ---------- limpeza e título inteligente ---------- */
@@ -292,21 +324,50 @@ function smartTitle(meta) {
   return t || "Link guardado";
 }
 
-// learned: { categoria: [palavras] } — sinais aprendidos com as correções
-// do usuário. Pesam mais que os sinais de fábrica (1.5 vs 1).
-function classifyContent(text, learned = {}) {
-  if (!text) return { cat: "ideias", confidence: 0 };
-  const t = text.toLowerCase();
+// Classificador em cascata (pedido do Paulo):
+//   1. tenta encaixar nas TAGS QUE O USUÁRIO JÁ TEM (match pelo nome + sinais)
+//   2. se nenhuma serve, deixa um sinal de tópico VENCER e cria a tag nova
+//   3. se não houver conteúdo legível / nada bate, cai na tag padrão "ideias"
+// learned: { tag: [palavras] } aprendidas com as correções (pesam 1.5 vs 1).
+// userCats: tags que o usuário já possui (built-in + criadas) — têm prioridade.
+//
+// Casamento por PALAVRA INTEIRA (não substring): normaliza tudo a espaços e
+// procura " palavra " — assim "ai" não casa dentro de "praia"/"email".
+function classifyContent(text, learned = {}, userCats = []) {
+  if (!text || !text.trim()) return { cat: "ideias", confidence: 0 };
+  const t = " " + text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim() + " ";
+  const singular = w => w.replace(/s$/, "");
+  const has = w => {
+    w = w.toLowerCase().trim();
+    if (!w) return false;
+    if (w.includes(" ")) return t.includes(w);        // frase: substring basta
+    return t.includes(" " + w + " ");                 // palavra: fronteira exata
+  };
+  const sigScore = words => (words || []).reduce((s, w) => s + (has(w) ? 1 : 0), 0);
+
   let best = { cat: "ideias", score: 0 };
+  const bump = (cat, s) => { if (s > best.score) best = { cat, score: s }; };
+
+  // 1) prioriza as tags existentes do usuário (nome literal + sinais + aprendido)
+  for (const cat of userCats || []) {
+    const name = String(cat).toLowerCase();
+    let s = 0;
+    if (has(name) || has(singular(name))) s += 2;     // o nome da tag aparece no post
+    s += sigScore(CATEGORY_SIGNALS[cat]);
+    s += sigScore(learned[cat]) * 1.5;
+    if (s > 0) bump(cat, s + 0.5);                    // leve vantagem p/ tag já existente
+  }
+
+  // 2) sinais de tópico — se vencerem, a tag (nova) é criada a partir do conteúdo
   for (const [cat, words] of Object.entries(CATEGORY_SIGNALS)) {
-    const score = words.reduce((s, w) => s + (t.includes(w) ? 1 : 0), 0);
-    if (score > best.score) best = { cat, score };
+    bump(cat, sigScore(words));
   }
+  // 3) palavras aprendidas de tags ainda não cobertas
   for (const [cat, words] of Object.entries(learned)) {
-    const score = words.reduce((s, w) => s + (t.includes(w) ? 1.5 : 0), 0)
-      + (CATEGORY_SIGNALS[cat] ? CATEGORY_SIGNALS[cat].reduce((s, w) => s + (t.includes(w) ? 1 : 0), 0) : 0);
-    if (score > best.score) best = { cat, score };
+    bump(cat, sigScore(words) * 1.5);
   }
+
+  if (best.score === 0) return { cat: "ideias", confidence: 0 };
   return { cat: best.cat, confidence: best.score };
 }
 // Vault — protótipo de interface
@@ -315,6 +376,7 @@ function classifyContent(text, learned = {}) {
 const feed = document.getElementById("feed");
 const filters = document.getElementById("filters");
 const filterActions = document.getElementById("filterActions");
+const filtersMore = document.getElementById("filtersMore");
 const form = document.getElementById("intakeForm");
 const input = document.getElementById("intakeInput");
 const status = document.getElementById("intakeStatus");
@@ -339,20 +401,7 @@ const CATS_KEY = "vault.cats";       // categorias criadas pelo usuário
 const LEARN_KEY = "vault.learn";     // palavras aprendidas por categoria
 const CATOV_KEY = "vault.catov";     // categoria corrigida dos itens de exemplo
 const SUBOV_KEY = "vault.subov";     // subtag dos itens de exemplo (seed-N → subtag)
-const SEEN_KEY  = "vault.seen";      // IDs marcados como visto (Set serializado)
 const ORDER_KEY = "vault.order";     // ordem customizada dos cards no modo compacto
-
-function loadSeen() {
-  try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY)) || []); }
-  catch { return new Set(); }
-}
-function toggleSeenFor(id) {
-  const s = loadSeen();
-  const nowSeen = !s.has(id);
-  if (nowSeen) s.add(id); else s.delete(id);
-  localStorage.setItem(SEEN_KEY, JSON.stringify([...s]));
-  return nowSeen;
-}
 function loadOrder() {
   try { return JSON.parse(localStorage.getItem(ORDER_KEY)) || []; }
   catch { return []; }
@@ -380,7 +429,17 @@ function subcatsOf(cat) {
 // define/limpa a subtag de um item (e persiste)
 function setItemSubcat(item, subcat, card) {
   item.subcat = subcat || null;
-  if (card) card.dataset.sub = item.subcat || "";
+  if (card) {
+    card.dataset.sub = item.subcat || "";
+    const tagsEl = card.querySelector(".card-tags");
+    if (tagsEl) {
+      const catSpan = `<span class="card-cat cat-${item.cat.replace(/\s+/g, "-")}" title="${escAttr(item.cat)} — clique para trocar a tag">${truncTag(item.cat)}</span>`;
+      const subSpan = item.subcat
+        ? `<span class="card-sep" aria-hidden="true">${ICON_CHEVRON}</span><span class="card-subcat" title="${escAttr(item.subcat)}">${truncTag(item.subcat)}</span>`
+        : "";
+      tagsEl.innerHTML = catSpan + subSpan;
+    }
+  }
   if (item.id.startsWith("seed-")) {
     const ov = loadSubOverrides();
     if (item.subcat) ov[item.id] = item.subcat; else delete ov[item.id];
@@ -443,7 +502,7 @@ function setItemCat(item, cat, card) {
 // reclassifica um item pelo conteúdo, evitando a categoria removida
 function reclassifyText(item, exclude) {
   const text = [item.title, item.body, item.text, item.quote, item.author].filter(Boolean).join(" ");
-  let { cat } = classifyContent(text, loadLearn());
+  let { cat } = classifyContent(text, loadLearn(), allCats());
   if (!cat || cat === exclude) cat = "ideias";
   return cat;
 }
@@ -562,6 +621,9 @@ function loadSaved() {
     let migrated = false;
     items.forEach((i, idx) => {
       if (!i.id) { i.id = `v-legacy-${idx}`; migrated = true; }
+      // limpa rastreamento (utm_source=ig_web_copy_link, fbclid…) das URLs
+      // salvas por versões antigas — deixa "abrir original" e lixeira limpos
+      if (i.url) { const c = stripTracking(i.url); if (c !== i.url) { i.url = c; migrated = true; } }
       // embeds do Instagram salvos por versões antigas: regenera com a
       // estrutura atual. SÓ Instagram — outros embeds (Facebook) são
       // construídos a partir do URL resolvido, que não dá para refazer
@@ -642,24 +704,44 @@ const SOURCE_ICONS = {
   vimeo: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M22.4 7.3c-.1 2.4-1.8 5.7-5 10a23.7 23.7 0 0 1-5.2 5.3c-1.2.8-2.4 1.3-3.6 1.3-1 0-1.9-.7-2.6-2.2L4.7 17c-.7-2.4-1.4-3.7-2.2-3.7-.2 0-.7.3-1.7 1L.5 13.1c1-.9 2-1.8 3-2.8 1.4-1.2 2.4-1.8 3.1-1.9 1.6-.2 2.6.9 3 3.4.4 2.6.7 4.3 1 5 .5 2.3 1.1 3.5 1.8 3.5.5 0 1.3-.8 2.3-2.3 1-1.6 1.5-2.8 1.6-3.6.1-1.4-.4-2.1-1.6-2.1-.6 0-1.1.1-1.7.4 1.1-3.6 3.2-5.4 6.3-5.2 2.3.1 3.4 1.5 3.1 4z"/></svg>`
 };
 
-const EYE_SVG        = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-const EYE_CLOSED_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+// ícones da UI do card (Figma) — fill currentColor p/ adaptar ao tema
+const ICON_EXPAND   = `<svg viewBox="0 0 12 13" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 0.590909V4.13636C12 4.29308 11.9425 4.44338 11.8402 4.5542C11.7379 4.66502 11.5992 4.72727 11.4545 4.72727C11.3099 4.72727 11.1711 4.66502 11.0689 4.5542C10.9666 4.44338 10.9091 4.29308 10.9091 4.13636V2.01722L7.47682 5.73625C7.37447 5.84713 7.23565 5.90942 7.09091 5.90942C6.94617 5.90942 6.80735 5.84713 6.705 5.73625C6.60265 5.62537 6.54515 5.47499 6.54515 5.31818C6.54515 5.16138 6.60265 5.01099 6.705 4.90011L10.138 1.18182H8.18182C8.03715 1.18182 7.89842 1.11956 7.79612 1.00874C7.69383 0.897928 7.63636 0.747628 7.63636 0.590909C7.63636 0.43419 7.69383 0.28389 7.79612 0.173073C7.89842 0.0622564 8.03715 0 8.18182 0H11.4545C11.5992 0 11.7379 0.0622564 11.8402 0.173073C11.9425 0.28389 12 0.43419 12 0.590909ZM4.52318 7.26375L1.09091 10.9828V8.86364C1.09091 8.70692 1.03344 8.55662 0.931149 8.4458C0.828857 8.33498 0.690118 8.27273 0.545455 8.27273C0.400791 8.27273 0.262053 8.33498 0.15976 8.4458C0.0574675 8.55662 0 8.70692 0 8.86364V12.4091C0 12.5658 0.0574675 12.7161 0.15976 12.8269C0.262053 12.9377 0.400791 13 0.545455 13H3.81818C3.96285 13 4.10158 12.9377 4.20388 12.8269C4.30617 12.7161 4.36364 12.5658 4.36364 12.4091C4.36364 12.2524 4.30617 12.1021 4.20388 11.9913C4.10158 11.8804 3.96285 11.8182 3.81818 11.8182H1.86205L5.295 8.09989C5.39735 7.98901 5.45485 7.83862 5.45485 7.68182C5.45485 7.52501 5.39735 7.37463 5.295 7.26375C5.19265 7.15287 5.05384 7.09058 4.90909 7.09058C4.76435 7.09058 4.62553 7.15287 4.52318 7.26375Z"/></svg>`;
+const ICON_COMPRESS = `<svg viewBox="0 0 13 13" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12.8268 1.00925L9.10799 4.72736H11.227C11.3837 4.72736 11.534 4.78962 11.6448 4.90043C11.7557 5.01124 11.8179 5.16153 11.8179 5.31824C11.8179 5.47495 11.7557 5.62524 11.6448 5.73606C11.534 5.84687 11.3837 5.90912 11.227 5.90912H7.68176C7.52505 5.90912 7.37475 5.84687 7.26394 5.73606C7.15313 5.62524 7.09088 5.47495 7.09088 5.31824V1.77297C7.09088 1.61626 7.15313 1.46596 7.26394 1.35515C7.37475 1.24434 7.52505 1.18209 7.68176 1.18209C7.83847 1.18209 7.98876 1.24434 8.09957 1.35515C8.21038 1.46596 8.27264 1.61626 8.27264 1.77297V3.89201L11.9907 0.173161C12.1016 0.0622877 12.252 0 12.4088 0C12.5656 0 12.716 0.0622877 12.8268 0.173161C12.9377 0.284034 13 0.43441 13 0.591208C13 0.748006 12.9377 0.898382 12.8268 1.00925ZM5.31824 7.09088H1.77297C1.61626 7.09088 1.46596 7.15313 1.35515 7.26394C1.24434 7.37475 1.18209 7.52505 1.18209 7.68176C1.18209 7.83847 1.24434 7.98876 1.35515 8.09957C1.46596 8.21038 1.61626 8.27264 1.77297 8.27264H3.89201L0.173161 11.9907C0.0622877 12.1016 0 12.252 0 12.4088C0 12.5656 0.0622877 12.716 0.173161 12.8268C0.284034 12.9377 0.43441 13 0.591208 13C0.748006 13 0.898382 12.9377 1.00925 12.8268L4.72736 9.10799V11.227C4.72736 11.3837 4.78962 11.534 4.90043 11.6448C5.01124 11.7557 5.16153 11.8179 5.31824 11.8179C5.47495 11.8179 5.62524 11.7557 5.73606 11.6448C5.84687 11.534 5.90912 11.3837 5.90912 11.227V7.68176C5.90912 7.52505 5.84687 7.37475 5.73606 7.26394C5.62524 7.15313 5.47495 7.09088 5.31824 7.09088Z"/></svg>`;
+const ICON_DRAG     = `<svg viewBox="0 0 10 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 1.5C3 1.79667 2.91203 2.08668 2.74721 2.33336C2.58238 2.58003 2.34812 2.77229 2.07403 2.88582C1.79994 2.99935 1.49834 3.02906 1.20737 2.97118C0.916394 2.9133 0.64912 2.77044 0.439341 2.56066C0.229562 2.35088 0.0867006 2.08361 0.0288228 1.79264C-0.0290551 1.50166 0.000649922 1.20006 0.114181 0.925976C0.227713 0.651886 0.419972 0.417619 0.666646 0.252797C0.913319 0.0879744 1.20333 0 1.5 0C1.89783 0 2.27936 0.158036 2.56066 0.439341C2.84197 0.720645 3 1.10218 3 1.5ZM8.25 3C8.54667 3 8.83668 2.91203 9.08336 2.74721C9.33003 2.58238 9.52229 2.34811 9.63582 2.07403C9.74935 1.79994 9.77906 1.49834 9.72118 1.20737C9.6633 0.916394 9.52044 0.649119 9.31066 0.439341C9.10088 0.229562 8.83361 0.0867006 8.54264 0.0288228C8.25167 -0.0290551 7.95006 0.000649922 7.67598 0.114181C7.40189 0.227713 7.16762 0.419972 7.0028 0.666646C6.83797 0.913319 6.75 1.20333 6.75 1.5C6.75 1.89783 6.90804 2.27936 7.18934 2.56066C7.47065 2.84197 7.85218 3 8.25 3ZM1.5 6.375C1.20333 6.375 0.913319 6.46297 0.666646 6.6278C0.419972 6.79262 0.227713 7.02689 0.114181 7.30098C0.000649922 7.57506 -0.0290551 7.87666 0.0288228 8.16764C0.0867006 8.45861 0.229562 8.72588 0.439341 8.93566C0.64912 9.14544 0.916394 9.2883 1.20737 9.34618C1.49834 9.40406 1.79994 9.37435 2.07403 9.26082C2.34812 9.14729 2.58238 8.95503 2.74721 8.70836C2.91203 8.46168 3 8.17167 3 7.875C3 7.47718 2.84197 7.09565 2.56066 6.81434C2.27936 6.53304 1.89783 6.375 1.5 6.375ZM8.25 6.375C7.95333 6.375 7.66332 6.46297 7.41665 6.6278C7.16997 6.79262 6.97771 7.02689 6.86418 7.30098C6.75065 7.57506 6.72095 7.87666 6.77882 8.16764C6.8367 8.45861 6.97956 8.72588 7.18934 8.93566C7.39912 9.14544 7.66639 9.2883 7.95737 9.34618C8.24834 9.40406 8.54994 9.37435 8.82403 9.26082C9.09812 9.14729 9.33238 8.95503 9.49721 8.70836C9.66203 8.46168 9.75 8.17167 9.75 7.875C9.75 7.47718 9.59197 7.09565 9.31066 6.81434C9.02936 6.53304 8.64783 6.375 8.25 6.375ZM1.5 12.75C1.20333 12.75 0.913319 12.838 0.666646 13.0028C0.419972 13.1676 0.227713 13.4019 0.114181 13.676C0.000649922 13.9501 -0.0290551 14.2517 0.0288228 14.5426C0.0867006 14.8336 0.229562 15.1009 0.439341 15.3107C0.64912 15.5204 0.916394 15.6633 1.20737 15.7212C1.49834 15.7791 1.79994 15.7494 2.07403 15.6358C2.34812 15.5223 2.58238 15.33 2.74721 15.0834C2.91203 14.8367 3 14.5467 3 14.25C3 13.8522 2.84197 13.4706 2.56066 13.1893C2.27936 12.908 1.89783 12.75 1.5 12.75ZM8.25 12.75C7.95333 12.75 7.66332 12.838 7.41665 13.0028C7.16997 13.1676 6.97771 13.4019 6.86418 13.676C6.75065 13.9501 6.72095 14.2517 6.77882 14.5426C6.8367 14.8336 6.97956 15.1009 7.18934 15.3107C7.39912 15.5204 7.66639 15.6633 7.95737 15.7212C8.24834 15.7791 8.54994 15.7494 8.82403 15.6358C9.09812 15.5223 9.33238 15.33 9.49721 15.0834C9.66203 14.8367 9.75 14.5467 9.75 14.25C9.75 13.8522 9.59197 13.4706 9.31066 13.1893C9.02936 12.908 8.64783 12.75 8.25 12.75Z"/></svg>`;
+const ICON_CHEVRON  = `<svg viewBox="0 0 5 9" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M4.87781 4.78942L0.711611 8.88012C0.672902 8.91813 0.626949 8.94827 0.576374 8.96884C0.525799 8.98941 0.471593 9 0.416852 9C0.36211 9 0.307904 8.98941 0.257329 8.96884C0.206755 8.94827 0.160801 8.91813 0.122093 8.88012C0.0833846 8.84211 0.0526795 8.79699 0.0317308 8.74733C0.010782 8.69768 0 8.64445 0 8.5907C0 8.53695 0.010782 8.48373 0.0317308 8.43407C0.0526795 8.38441 0.0833846 8.33929 0.122093 8.30128L3.99406 4.5L0.122093 0.698715C0.043918 0.621957 0 0.51785 0 0.409298C0 0.300745 0.043918 0.196639 0.122093 0.11988C0.200268 0.0431223 0.306296 0 0.416852 0C0.527408 0 0.633436 0.0431223 0.711611 0.11988L4.87781 4.21058C4.91655 4.24857 4.94728 4.29369 4.96824 4.34335C4.98921 4.39301 5 4.44624 5 4.5C5 4.55376 4.98921 4.60699 4.96824 4.65665C4.94728 4.70631 4.91655 4.75143 4.87781 4.78942Z"/></svg>`;
+const ICON_EXTERNAL = `<svg viewBox="0 0 10 10" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.33333 5.41667V9.16667C8.33333 9.38768 8.24554 9.59964 8.08926 9.75592C7.93297 9.9122 7.72101 10 7.5 10H0.833333C0.61232 10 0.400358 9.9122 0.244078 9.75592C0.0877973 9.59964 0 9.38768 0 9.16667V2.5C0 2.27899 0.0877973 2.06702 0.244078 1.91074C0.400358 1.75446 0.61232 1.66667 0.833333 1.66667H4.58333C4.69384 1.66667 4.79982 1.71057 4.87796 1.78871C4.9561 1.86685 5 1.97283 5 2.08333C5 2.19384 4.9561 2.29982 4.87796 2.37796C4.79982 2.4561 4.69384 2.5 4.58333 2.5H0.833333V9.16667H7.5V5.41667C7.5 5.30616 7.5439 5.20018 7.62204 5.12204C7.70018 5.0439 7.80616 5 7.91667 5C8.02717 5 8.13315 5.0439 8.21129 5.12204C8.28943 5.20018 8.33333 5.30616 8.33333 5.41667ZM10 0.416667C10 0.30616 9.9561 0.200179 9.87796 0.122039C9.79982 0.0438989 9.69384 0 9.58333 0H6.25C6.16754 -0.0000647615 6.08692 0.0243372 6.01834 0.0701166C5.94976 0.115896 5.8963 0.180995 5.86474 0.257171C5.83318 0.333347 5.82493 0.417176 5.84103 0.498045C5.85713 0.578913 5.89687 0.653185 5.95521 0.711458L7.3276 2.08333L5.12187 4.28854C5.04369 4.36672 4.99977 4.47276 4.99977 4.58333C4.99977 4.6939 5.04369 4.79994 5.12187 4.87813C5.20006 4.95631 5.3061 5.00023 5.41667 5.00023C5.52723 5.00023 5.63327 4.95631 5.71146 4.87813L7.91667 2.6724L9.28854 4.04479C9.34681 4.10313 9.42109 4.14287 9.50196 4.15897C9.58282 4.17507 9.66665 4.16682 9.74283 4.13526C9.81901 4.1037 9.8841 4.05024 9.92988 3.98166C9.97566 3.91308 10.0001 3.83246 10 3.75V0.416667Z"/></svg>`;
+
+// limite de caracteres da tag/subtag dentro do card: generoso, mas com
+// reticências p/ nunca empurrar/cobrir os ícones do canto direito (o CSS
+// trava a largura como rede de segurança; isto evita strings absurdas)
+const TAG_MAX = 26;
+function truncTag(s, max = TAG_MAX) {
+  s = String(s || "");
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + "…" : s;
+}
+function escAttr(s) { return String(s || "").replace(/"/g, "&quot;"); }
+
+// favicon do site de origem — resolvido automaticamente pelo domínio (não
+// hardcode de logo). item.url vem sem protocolo: "instagram.com/p/…"
+function domainOf(url) { return String(url || "").replace(/^https?:\/\//, "").split("/")[0]; }
+function faviconFor(url) {
+  const d = domainOf(url);
+  return d ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(d)}&sz=64` : "";
+}
 
 function cardHTML(item) {
-  const cat = `<span class="card-cat cat-${item.cat.replace(/\s+/g, "-")}" title="clique para trocar a categoria">${item.cat}</span>`;
+  const cat = `<span class="card-cat cat-${item.cat.replace(/\s+/g, "-")}" title="${escAttr(item.cat)} — clique para trocar a tag">${truncTag(item.cat)}</span>`;
   const sub = item.subcat
-    ? `<span class="card-subcat" title="subtag">${item.subcat}</span>`
+    ? `<span class="card-sep" aria-hidden="true">${ICON_CHEVRON}</span><span class="card-subcat" title="${escAttr(item.subcat)}">${truncTag(item.subcat)}</span>`
     : "";
-  const seenBtn = item.id
-    ? `<button class="card-seen${item.seen ? " is-seen" : ""}" title="${item.seen ? "marcar como não visto" : "marcar como visto"}" aria-label="visto">${item.seen ? EYE_CLOSED_SVG : EYE_SVG}</button>`
-    : "";
-  const seenLabel = item.id
-    ? `<span class="seen-label">Marcado como visto</span>`
-    : "";
+  // alça de drag — filho direto do card p/ ocupar toda a altura na grid compacta
+  const dragHandle = `<span class="card-drag" aria-hidden="true">${ICON_DRAG}</span>`;
+  // botão expandir/comprimir (só no compacto, via CSS) — ícone inicial = expandir
+  const foldBtn = `<button class="card-fold" title="expandir / comprimir" aria-label="expandir ou comprimir">${ICON_EXPAND}</button>`;
   const top = `
     <div class="card-top">
-      <span class="card-source source-${item.source}"><span class="source-icon">${SOURCE_ICONS[item.source] || SOURCE_ICONS.web}</span>${sourceLabel(item.source)}</span>
-      <span class="card-top-right">${seenBtn}${seenLabel}${cat}${sub}<button class="card-del" title="excluir do vautch" aria-label="excluir">×</button></span>
+      <span class="card-tags">${cat}${sub}</span>
+      <span class="card-top-right">${foldBtn}<button class="card-del" title="excluir do vautch" aria-label="excluir">×</button></span>
     </div>`;
 
   let body = "";
@@ -700,10 +782,14 @@ function cardHTML(item) {
       ${stats}`;
   }
 
+  // favicon do site (canto inferior direito, ao lado de "abrir original")
+  const fav = item.url
+    ? `<img class="card-fav" src="${faviconFor(item.url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">`
+    : "";
   const action = item.type === "note"
     ? `<button class="note-edit card-link">editar</button>`
     : item.url
-      ? `<a class="card-link" href="https://${item.url}" target="_blank" rel="noopener">abrir original ↗</a>`
+      ? `<a class="card-link" href="https://${item.url}" target="_blank" rel="noopener"><span class="card-link-ico">${ICON_EXTERNAL}</span>abrir original</a>`
       : "";
   const reportBtn = item.embed
     ? `<button class="card-report" title="reportar problema de visualização" aria-label="reportar">!</button>`
@@ -711,10 +797,10 @@ function cardHTML(item) {
   const footer = `
     <div class="card-footer">
       <span class="card-time">${item.time}</span>
-      <div class="card-footer-right">${action}${reportBtn}</div>
+      <div class="card-footer-right">${reportBtn}${action}${fav}</div>
     </div>`;
 
-  return top + body + footer;
+  return dragHandle + top + body + footer;
 }
 
 // nota → HTML: escapa, aplica **negrito**, bullets (- ou •) e parágrafos
@@ -749,7 +835,6 @@ function makeCard(item, isNew = false) {
     card.classList.add("card-reel");
   }
   if (item.type === "note") card.classList.add("card-note");
-  if (item.seen) card.classList.add("is-seen");
   card.dataset.cat = item.cat;
   card.dataset.sub = item.subcat || "";
   card.dataset.id = item.id || "";
@@ -762,41 +847,13 @@ function makeCard(item, isNew = false) {
     .filter(Boolean).join(" ");
   card.innerHTML = cardHTML(item);
 
-  // ---- botão VISTO ----
-  const seenBtn = card.querySelector(".card-seen");
-  if (seenBtn) {
-    seenBtn.addEventListener("click", e => {
-      e.stopPropagation();
-      let nowSeen;
-      if (item.id && item.id.startsWith("seed-")) {
-        nowSeen = toggleSeenFor(item.id);
-      } else if (item.id) {
-        item.seen = !item.seen;
-        nowSeen = item.seen;
-        updateSavedField(item.id, "seen", nowSeen);
-      }
-      card.classList.toggle("is-seen", nowSeen);
-      seenBtn.classList.toggle("is-seen", nowSeen);
-      seenBtn.title = nowSeen ? "marcar como não visto" : "marcar como visto";
-      seenBtn.innerHTML = nowSeen ? EYE_CLOSED_SVG : EYE_SVG;
-      if (!localStorage.getItem("vault.seenTip")) {
-        localStorage.setItem("vault.seenTip", "1");
-        showHintBalloon(seenBtn, nowSeen ? "<strong>Marcado como visto</strong> — o card fica mais discreto." : "Desmarcado — o card voltou ao normal.");
-      }
-    });
-  }
-
-  // ---- EXPAND card individual no modo compacto — com animação de height ----
-  const expandHandler = e => {
-    if (viewMode !== "compact") return;
-    if (e.target.closest("button, a, input, textarea, [contenteditable]")) return;
+  // ---- EXPAND/COMPRIMIR card individual no modo compacto (animação de height) ----
+  const foldBtn = card.querySelector(".card-fold");
+  const toggleExpand = () => {
     const isExpanded = card.classList.contains("is-expanded");
     const from = card.offsetHeight;
-    if (isExpanded) {
-      card.classList.remove("is-expanded");
-    } else {
-      card.classList.add("is-expanded");
-    }
+    card.classList.toggle("is-expanded", !isExpanded);
+    if (foldBtn) foldBtn.innerHTML = isExpanded ? ICON_EXPAND : ICON_COMPRESS;
     const to = card.offsetHeight;
     card.style.height = from + "px";
     card.classList.add("is-animating");
@@ -810,10 +867,23 @@ function makeCard(item, isNew = false) {
       if (!isExpanded) fitReels();
     }, 300);
   };
+  const expandHandler = e => {
+    if (viewMode !== "compact") return;
+    if (e.target.closest("button, a, input, textarea, [contenteditable]")) return;
+    toggleExpand();
+  };
   if (isTouch) {
     card.addEventListener("click", expandHandler);
   } else {
     card.addEventListener("dblclick", expandHandler);
+  }
+  // botão dedicado de expandir/comprimir (funciona em qualquer dispositivo)
+  if (foldBtn) {
+    foldBtn.addEventListener("click", e => {
+      e.stopPropagation();
+      if (viewMode !== "compact") return;
+      toggleExpand();
+    });
   }
 
   // ---- DRAG para reordenar (só modo compacto) ----
@@ -894,10 +964,12 @@ function makeCard(item, isNew = false) {
     setTimeout(() => {
       card.classList.add("is-collapsing");
       card.style.height = "0px";
-      const chip = filters.querySelector(".chip-trash");
+      // a lixeira vive em #filterActions (não em #filters) — buscar no
+      // documento; guarda contra null caso o chip ainda não exista
+      const chip = document.querySelector(".chip-trash");
       updateTrashChip();
-      chip.classList.add("is-gulping"); // só pisca em laranja
-      setTimeout(() => chip.classList.remove("is-gulping"), 600);
+      chip?.classList.add("is-gulping"); // só pisca em laranja
+      setTimeout(() => chip?.classList.remove("is-gulping"), 600);
     }, 430);
     setTimeout(() => { card.remove(); updateCount(); renderCats(); applyFilter(); }, 740);
   });
@@ -968,7 +1040,6 @@ function currentItems() {
   const subOv = loadSubOverrides();
   const titleOv = loadJSON("vault.titleov", {});
   const bodyOv = loadJSON("vault.bodyov", {});
-  const seenSet = loadSeen();
   const userItems = loadSaved().map(i => ({ ...i, day: "hoje" }));
   const seeds = VAULT_ITEMS
     .map((i, idx) => ({ ...i, id: `seed-${idx}` }))
@@ -976,9 +1047,7 @@ function currentItems() {
     .map(i => subOv[i.id] ? { ...i, subcat: subOv[i.id] } : i)
     .map(i => titleOv[i.id] !== undefined ? { ...i, title: titleOv[i.id] } : i)
     .map(i => bodyOv[i.id] !== undefined ? { ...i, body: bodyOv[i.id] } : i)
-    .filter(i => !deleted.includes(i.id))
-    .map(i => ({ ...i, seen: seenSet.has(i.id) }));
-  // seed items usam seenSet; saved items têm seen persistido diretamente no objeto
+    .filter(i => !deleted.includes(i.id));
   return [...userItems, ...seeds];
 }
 
@@ -1084,6 +1153,10 @@ function applyTheme(t) {
   // atributo no <html> (não no body): assim o script inline do <head> aplica
   // o tema antes do paint, sem flash, e o CSS html[data-theme] reage via CSS
   document.documentElement.dataset.theme = t;
+  // mantém o fundo inline do <html> em sincronia com o tema. Esse fundo existe
+  // p/ evitar flash branco antes do CSS carregar; se NÃO atualizar aqui, ao
+  // trocar de tema ele fica preso na cor antiga e vaza como faixa atrás do body.
+  document.documentElement.style.background = (t === "dark" ? "#131316" : "#f4efe6");
 }
 
 themeToggle.addEventListener("click", () => {
@@ -1096,6 +1169,13 @@ themeToggle.addEventListener("click", () => {
 // aplicado por um script inline no <head>/<body> antes do paint (sem flash);
 // aqui só sincronizamos o estado em runtime.
 applyTheme(localStorage.getItem(THEME_KEY) || "light");
+
+// devolve as transições depois do 1º paint (ver .theme-init no CSS). Dois rAFs
+// cobrem o caso normal; o setTimeout é fallback p/ ambientes onde o rAF não
+// dispara (aba sem paint) — senão as transições ficariam travadas pra sempre.
+function clearThemeInit() { document.documentElement.classList.remove("theme-init"); }
+requestAnimationFrame(() => requestAnimationFrame(clearThemeInit));
+setTimeout(clearThemeInit, 120);
 
 /* ---------- escala dos reels (auto-layout sem distorção) ---------- */
 
@@ -1323,18 +1403,22 @@ function initDrag() {
     return m;
   }
 
+  // anima os cards NÃO arrastados deslizando da posição antiga (A) até a nova
+  // (B) via Web Animations API. WAAPI roda independente de CSS transition/inline
+  // transform — então não briga com o rotate decorativo nem "pisca". Cancela a
+  // animação anterior antes de medir p/ lidar com arrastes rápidos (interrupção).
   function flipOthers(before) {
     feed.querySelectorAll(".card.is-draggable").forEach(c => {
       if (c === dragging) return;
-      const prev = before.get(c);
+      const prev = before.get(c);   // topo VISUAL antes do reorder (snapAll já lê o visual)
       if (prev === undefined) return;
-      const dy = prev - c.getBoundingClientRect().top;
+      c.getAnimations().forEach(a => a.cancel());      // remove anim em curso → vai pro layout base
+      const dy = prev - c.getBoundingClientRect().top; // de onde estava → onde está agora
       if (Math.abs(dy) < 1) return;
-      c.style.transition = "none";
-      c.style.transform = `translateY(${dy}px)`;
-      c.offsetHeight;
-      c.style.transition = `transform 220ms ${EASE}`;
-      c.style.transform = "";
+      c.animate(
+        [{ transform: `translateY(${dy}px)` }, { transform: "translateY(0px)" }],
+        { duration: 300, easing: EASE }
+      );
     });
   }
 
@@ -1357,6 +1441,10 @@ function initDrag() {
     if (viewMode !== "compact") return;
     dragging = card;
     lastOver = null;
+    // marca o feed em "reordenamento": o CSS então zera a rotação decorativa
+    // (nth-child) e o hover dos outros cards, deixando o transform do FLIP como
+    // ÚNICO transform — sem isso o card alvo reverte pro rotate e "salta".
+    document.body.classList.add("is-reordering");
     const r = card.getBoundingClientRect();
     offX = clientX - r.left;
     offY = clientY - r.top;
@@ -1391,31 +1479,46 @@ function initDrag() {
 
   function endDrag() {
     if (!dragging || !placeholder) return;
-    const targetR = placeholder.getBoundingClientRect();
-    dragging.style.transition = `left 260ms ${EASE}, top 260ms ${EASE}, transform 260ms ${EASE}, box-shadow 200ms`;
-    dragging.style.left      = targetR.left + "px";
-    dragging.style.top       = targetR.top  + "px";
-    dragging.style.transform = "scale(1)";
-    dragging.style.boxShadow = "";
+    const card = dragging;
+    // posição visual ATUAL do card (ele está em position:fixed seguindo o cursor)
+    const fromR = card.getBoundingClientRect();
+    // mede os outros antes do "encaixe" (não devem se mover, o placeholder já
+    // guardava o espaço — mas medimos por segurança)
     const before = snapAll();
-    feed.insertBefore(dragging, placeholder);
+    // coloca o card já no lugar FINAL do fluxo e remove TODO estilo de arraste:
+    // a partir daqui ele é um card estático normal — sem fixed→estático = sem pisca
+    card.classList.remove("is-dragging");
+    Object.assign(card.style, {
+      position: "", left: "", top: "", width: "",
+      zIndex: "", boxShadow: "", transform: "",
+      transformOrigin: "", transition: "", margin: "",
+    });
+    feed.insertBefore(card, placeholder);
     placeholder.remove(); placeholder = null;
+    // onde ele caiu no fluxo natural
+    const toR = card.getBoundingClientRect();
+    const dx = fromR.left - toR.left;
+    const dy = fromR.top  - toR.top;
+    // FLIP no próprio card via WAAPI: parte de onde a mão soltou (translate +
+    // scale do arraste) e desliza até o lugar (identidade). Como ele já está em
+    // fluxo e o WAAPI é só uma sobreposição que termina sem fill, NÃO há salto
+    // fixed→estático: nada de reset, nada de piscada.
+    const restShadow = getComputedStyle(card).boxShadow;
+    card.getAnimations().forEach(a => a.cancel());
+    card.animate(
+      [
+        { transform: `translate(${dx}px, ${dy}px) scale(1.02)`, boxShadow: "0 18px 44px rgba(0,0,0,.4)", zIndex: 800 },
+        { transform: "translate(0px, 0px) scale(1)", boxShadow: restShadow, zIndex: 800 }
+      ],
+      { duration: 300, easing: EASE }
+    );
+    // os outros deslizam para o novo lugar no mesmo tempo
     flipOthers(before);
-    setTimeout(() => {
-      if (!dragging) return;
-      dragging.classList.remove("is-dragging");
-      Object.assign(dragging.style, {
-        position: "", left: "", top: "", width: "",
-        zIndex: "", boxShadow: "", transform: "",
-        transformOrigin: "", transition: "", margin: ""
-      });
-      feed.querySelectorAll(".card.is-draggable").forEach(c => {
-        c.style.transition = ""; c.style.transform = "";
-      });
-      const order = [...feed.querySelectorAll(".card")].map(c => c.dataset.id).filter(Boolean);
-      saveOrder(order);
-      dragging = null; lastOver = null;
-    }, 260);
+    const order = [...feed.querySelectorAll(".card")].map(c => c.dataset.id).filter(Boolean);
+    saveOrder(order);
+    dragging = null; lastOver = null;
+    // rotação decorativa volta suave (.card tem transition: transform .35s)
+    setTimeout(() => document.body.classList.remove("is-reordering"), 300);
   }
 
   function cancelDrag() {
@@ -1428,6 +1531,7 @@ function initDrag() {
     });
     placeholder?.remove(); placeholder = null;
     feed.querySelectorAll(".card.is-draggable").forEach(c => { c.style.transition = ""; c.style.transform = ""; });
+    document.body.classList.remove("is-reordering");
     dragging = null; lastOver = null;
   }
 
@@ -1532,6 +1636,7 @@ function onFilterClick(e) {
 }
 filters.addEventListener("click", onFilterClick);
 filterActions.addEventListener("click", onFilterClick);
+filtersMore.addEventListener("click", onFilterClick);
 
 /* ---------- dropdown de subtags (ancorado no chip) ---------- */
 
@@ -1897,6 +2002,7 @@ function renderCats() {
   const filterbar = document.getElementById("filterbar");
   filters.innerHTML = "";
   filterActions.innerHTML = "";
+  filtersMore.innerHTML = "";
 
   // nada guardado: sem TUDO / filtros / view. Só a lixeira (centralizada) se
   // houver itens nela — e ela vira um toggle para voltar à tela inicial.
@@ -1932,13 +2038,10 @@ function renderCats() {
   filt.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>`;
   filterActions.appendChild(filt);
 
-  // "+N" / "menos" — abre/fecha a visão expandida (quebra de linha)
-  if (present.length > CAT_CAP) {
-    const more = document.createElement("button");
-    more.className = "chip chip-more";
-    more.textContent = catsExpanded ? "− menos" : `+${present.length - CAT_CAP}`;
-    filterActions.appendChild(more);
-  }
+  // "+N" / "−": calculado pela viewport (quantas pílulas ficaram escondidas no
+  // overflow). Fica em #filtersMore — sempre no MESMO lugar (não se move ao
+  // alternar). Ver updateMoreChip().
+  updateMoreChip();
 
   // lixeira sempre por último (ícone + rótulo; o rótulo some no mobile via CSS)
   filterActions.appendChild(buildTrashChip());
@@ -1952,6 +2055,60 @@ function renderCats() {
     markActiveChip();
   }
 }
+
+// quantas pílulas de tag ficaram FORA da área visível do container (escondidas
+// pelo overflow — à direita no mobile que rola, ou abaixo da 1ª linha no
+// desktop que corta). É a base do "+N": muda conforme a viewport.
+function countHiddenChips() {
+  const chips = [...filters.querySelectorAll(".chip")];
+  if (!chips.length) return 0;
+  const cr = filters.getBoundingClientRect();
+  // mede por LINHA (não pela altura do container): no desktop a 1ª linha é a
+  // visível e o que quebrou pra baixo está escondido; no mobile (nowrap) tudo
+  // fica na 1ª linha e o escondido sai pela direita. Medir pela linha evita o
+  // bug de contar 0 enquanto o max-height ainda está animando ao recolher.
+  const firstTop = chips[0].getBoundingClientRect().top;
+  let n = 0;
+  chips.forEach(c => {
+    const r = c.getBoundingClientRect();
+    const belowFirstRow = r.top > firstTop + 4;     // quebrou pra linha de baixo (desktop)
+    const offRight = r.right > cr.right + 1;          // saiu pela direita (mobile rolável)
+    const offLeft  = r.left < cr.left - 1;
+    if (belowFirstRow || offRight || offLeft) n++;
+  });
+  return n;
+}
+
+// "+N" (recolhido) ou "−" (expandido), sempre em #filtersMore — mesmo lugar.
+// Recolhido: só aparece se houver pílulas escondidas (senão some, ex: desktop
+// com espaço de sobra). Expandido: vira "−" e fica no mesmo lugar.
+function updateMoreChip() {
+  filtersMore.innerHTML = "";
+  if (activeCat === "__trash" || currentItems().length === 0) return;
+  if (catsExpanded) {
+    const less = document.createElement("button");
+    less.className = "chip chip-more chip-less";
+    less.textContent = "−";
+    less.title = "mostrar menos";
+    less.setAttribute("aria-label", "mostrar menos tags");
+    filtersMore.appendChild(less);
+    return;
+  }
+  const hidden = countHiddenChips();
+  if (hidden <= 0) return;
+  const more = document.createElement("button");
+  more.className = "chip chip-more";
+  more.textContent = `+${hidden}`;
+  more.title = "mostrar todas as tags";
+  filtersMore.appendChild(more);
+}
+
+// recalcula o "+N" quando a viewport muda (mais/menos pílulas cabem na linha)
+let moreResizeRAF = 0;
+addEventListener("resize", () => {
+  cancelAnimationFrame(moreResizeRAF);
+  moreResizeRAF = requestAnimationFrame(updateMoreChip);
+});
 
 /* ---------- lixeira ---------- */
 
@@ -2371,10 +2528,11 @@ function insertNewItem(newItem, statusMsg) {
 async function saveNote(text) {
   setStatus("lendo sua nota");
   let cat = await aiClassify(text, allCats());
+  if (!cat) cat = classifyContent(text, loadLearn(), allCats()).cat;
+  // tag nova (criada a partir do conteúdo) entra na lista do usuário
   if (cat && !allCats().includes(cat)) {
     localStorage.setItem(CATS_KEY, JSON.stringify([...loadCats(), cat]));
   }
-  if (!cat) cat = classifyContent(text, loadLearn()).cat;
   insertNewItem({
     id: `v${Date.now()}`,
     source: "nota",
@@ -2503,14 +2661,12 @@ form.addEventListener("submit", async e => {
 
   // classifica pelo conteúdo real (título + descrição), não pelo URL
   const contentText = [meta?.title, meta?.description, meta?.author].filter(Boolean).join(" · ");
-  // 1º tenta a IA real (se houver chave); senão, heurística local
+  // 1º tenta a IA real (se houver chave); senão, heurística local em cascata
   let cat = await aiClassify(contentText, allCats());
-  if (cat) {
-    if (!allCats().includes(cat)) {
-      localStorage.setItem(CATS_KEY, JSON.stringify([...loadCats(), cat]));
-    }
-  } else {
-    cat = classifyContent(contentText, loadLearn()).cat;
+  if (!cat) cat = classifyContent(contentText, loadLearn(), allCats()).cat;
+  // tag nova (criada a partir do conteúdo) entra na lista do usuário
+  if (cat && !allCats().includes(cat)) {
+    localStorage.setItem(CATS_KEY, JSON.stringify([...loadCats(), cat]));
   }
 
   const cleanDesc = cleanDescription(meta?.description);
@@ -2533,7 +2689,7 @@ form.addEventListener("submit", async e => {
     image: isFbPrivate ? null : (fallbackImage || meta?.image || null),
     thumb: null,
     time: "guardado agora mesmo",
-    url: url.replace(/^https?:\/\//, "")
+    url: stripTracking(url).replace(/^https?:\/\//, "")
   };
 
   persist(newItem);
