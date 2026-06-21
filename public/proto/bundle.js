@@ -433,11 +433,20 @@ function setItemSubcat(item, subcat, card) {
     card.dataset.sub = item.subcat || "";
     const tagsEl = card.querySelector(".card-tags");
     if (tagsEl) {
-      const catSpan = `<span class="card-cat cat-${item.cat.replace(/\s+/g, "-")}" title="${escAttr(item.cat)} — clique para trocar a tag">${truncTag(item.cat)}</span>`;
-      const subSpan = item.subcat
-        ? `<span class="card-sep" aria-hidden="true">${ICON_CHEVRON}</span><span class="card-subcat" title="${escAttr(item.subcat)}">${truncTag(item.subcat)}</span>`
-        : "";
-      tagsEl.innerHTML = catSpan + subSpan;
+      // remove sep + subcat antigos sem tocar no .card-cat (que tem listener)
+      tagsEl.querySelectorAll(".card-sep, .card-subcat").forEach(el => el.remove());
+      if (item.subcat) {
+        const sep = document.createElement("span");
+        sep.className = "card-sep";
+        sep.setAttribute("aria-hidden", "true");
+        sep.innerHTML = ICON_CHEVRON;
+        const sub = document.createElement("span");
+        sub.className = "card-subcat";
+        sub.title = item.subcat;
+        sub.textContent = truncTag(item.subcat);
+        tagsEl.appendChild(sep);
+        tagsEl.appendChild(sub);
+      }
     }
   }
   if (item.id.startsWith("seed-")) {

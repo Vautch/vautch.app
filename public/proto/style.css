@@ -887,6 +887,8 @@ html[data-theme="dark"] .dd-edit-inp {
 html[data-theme="dark"] .cat-sub-head:not(:first-child) { border-color: rgba(236,231,224,.18); }
 
 .sub-option {
+  display: block;
+  width: 100%;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: .04em;
