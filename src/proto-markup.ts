@@ -47,6 +47,9 @@ export const BODY_HTML = `
       <span>importar dados</span><span class="menu-state">↑ JSON</span>
       <input type="file" id="importFile" accept=".json" style="display:none;">
     </label>
+    <button class="menu-item" id="logoutBtn">
+      <span>sair da conta</span><span class="menu-state">→</span>
+    </button>
   </div>
 </div>
 

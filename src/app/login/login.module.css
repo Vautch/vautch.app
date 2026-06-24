@@ -1,0 +1,219 @@
+/* Tela de login — usa as variáveis globais do protótipo (/proto/style.css):
+   --paper, --card, --ink, --ink-soft, --ink-faint, --accent. Respeita tema. */
+
+.wrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 40px 22px 64px;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px; /* mais respiro entre logo e tagline */
+}
+
+/* só dimensiona — NÃO mexe em display (o toggle light/dark é do /proto/style.css) */
+.brand :global(.logo-img) {
+  height: clamp(58px, 9vw, 72px); /* logo maior */
+  width: auto;
+}
+
+.tagline {
+  color: var(--ink-soft);
+  font-style: italic;
+  font-size: 15.5px;
+  letter-spacing: 0.01em;
+}
+
+/* posiciona o switch do app (a aparência vem do .theme-switch em /proto/style.css) */
+.themeSwitchWrap {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+}
+
+/* erro de validação client-side (dentro do card, acima do form) */
+.formError {
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--danger);
+  background: rgba(200, 55, 45, 0.08);
+  padding: 9px 14px;
+  border-radius: 12px;
+}
+
+.card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--card);
+  border-radius: 22px;
+  padding: 26px 24px 22px;
+  box-shadow: 0 2px 6px rgba(31, 27, 22, 0.07), 0 14px 34px -10px rgba(31, 27, 22, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+:global(html[data-theme="dark"]) .card {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4), 0 16px 38px -10px rgba(0, 0, 0, 0.6);
+}
+
+.google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1.5px solid rgba(150, 139, 120, 0.32);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+}
+.google:hover {
+  border-color: var(--ink);
+  background: var(--paper-deep);
+}
+.google:active {
+  transform: scale(0.98);
+}
+.google:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-faint);
+  font-size: 13px;
+}
+.divider::before,
+.divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(150, 139, 120, 0.28);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+}
+
+.field {
+  width: 100%;
+  border: 1.5px solid transparent;
+  background: var(--paper);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-family: var(--body);
+  font-size: 15.5px;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.field::placeholder {
+  color: var(--ink-faint);
+}
+.field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.submit {
+  margin-top: 4px;
+  width: 100%;
+  padding: 13px 18px;
+  border: none;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 15.5px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background 0.25s, transform 0.15s;
+}
+.submit:hover {
+  background: var(--accent);
+}
+.submit:active {
+  transform: scale(0.98);
+}
+
+.toggle {
+  text-align: center;
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.toggle button,
+.toggle a {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-family: var(--body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  border-bottom: 1.5px dashed var(--accent);
+  text-decoration: none;
+}
+
+.forgot {
+  text-align: center;
+  font-size: 13.5px;
+  margin-top: -2px;
+}
+.forgot a {
+  color: var(--ink-faint);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--ink-faint);
+}
+.forgot a:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.error,
+.message {
+  width: 100%;
+  max-width: 380px;
+  text-align: center;
+  font-size: 14px;
+  padding: 11px 16px;
+  border-radius: 14px;
+}
+.error {
+  color: var(--danger);
+  background: rgba(200, 55, 45, 0.08);
+}
+.message {
+  color: var(--leaf);
+  background: var(--leaf-soft);
+}

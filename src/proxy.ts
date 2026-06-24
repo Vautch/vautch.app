@@ -8,7 +8,9 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // tudo, exceto estáticos e imagens
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // Tudo, EXCETO estáticos. Crucial: excluir as pastas públicas (/proto, /assets)
+    // e extensões de asset (css/js/fontes), senão o middleware redireciona o
+    // próprio CSS/JS pro /login quando não há sessão — e a página pública quebra.
+    "/((?!_next/static|_next/image|favicon.ico|proto/|assets/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|mjs|woff|woff2|map)$).*)",
   ],
 };

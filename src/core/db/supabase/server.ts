@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { hardenCookie } from "./cookie-options";
 
 /**
  * Client Supabase para Server Components / Route Handlers.
@@ -19,7 +20,7 @@ export async function createClient() {
         setAll(cookiesToSet) {
           try {
             cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options),
+              cookieStore.set(name, value, hardenCookie(options)),
             );
           } catch {
             // Chamado de um Server Component — o refresh fica a cargo do middleware.

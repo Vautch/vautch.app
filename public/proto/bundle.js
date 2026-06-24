@@ -630,6 +630,8 @@ function loadSaved() {
     let migrated = false;
     items.forEach((i, idx) => {
       if (!i.id) { i.id = `v-legacy-${idx}`; migrated = true; }
+      // resiliência: item sem categoria não pode quebrar o feed inteiro
+      if (!i.cat) { i.cat = "geral"; migrated = true; }
       // limpa rastreamento (utm_source=ig_web_copy_link, fbclid…) das URLs
       // salvas por versões antigas — deixa "abrir original" e lixeira limpos
       if (i.url) { const c = stripTracking(i.url); if (c !== i.url) { i.url = c; migrated = true; } }
@@ -739,7 +741,8 @@ function faviconFor(url) {
 }
 
 function cardHTML(item) {
-  const cat = `<span class="card-cat cat-${item.cat.replace(/\s+/g, "-")}" title="${escAttr(item.cat)} — clique para trocar a tag">${truncTag(item.cat)}</span>`;
+  const catName = item.cat || "geral"; // rede de segurança: nunca .replace de undefined
+  const cat = `<span class="card-cat cat-${catName.replace(/\s+/g, "-")}" title="${escAttr(catName)} — clique para trocar a tag">${truncTag(catName)}</span>`;
   const sub = item.subcat
     ? `<span class="card-sep" aria-hidden="true">${ICON_CHEVRON}</span><span class="card-subcat" title="${escAttr(item.subcat)}">${truncTag(item.subcat)}</span>`
     : "";
@@ -2831,7 +2834,7 @@ document.getElementById("importFile").addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = (ev) => {
+  reader.onload = async (ev) => {
     try {
       const data = JSON.parse(ev.target.result);
       if (!data.version || !Array.isArray(data.items)) {
@@ -2850,6 +2853,9 @@ document.getElementById("importFile").addEventListener("change", (e) => {
       if (Array.isArray(data.cats)) {
         localStorage.setItem(CATS_KEY, JSON.stringify([...new Set([...loadCats(), ...data.cats])]));
       }
+      // sobe pro Supabase ANTES do reload — senão o loadFromServer no init
+      // recarregaria o estado antigo do servidor e apagaria o que foi importado.
+      await syncToServer();
       alert(`Importação concluída: ${newItems.length} itens novos adicionados (${data.items.length - newItems.length} duplicatas ignoradas).`);
       location.reload();
     } catch {
@@ -2860,9 +2866,78 @@ document.getElementById("importFile").addEventListener("change", (e) => {
   e.target.value = "";
 });
 
+// Logout — limpa o cache local (anti-vazamento entre contas no mesmo browser,
+// ADR 0002) e POST /auth/signout (server limpa o cookie httpOnly e redireciona).
+const logoutBtn = document.getElementById("logoutBtn");
+if (logoutBtn) {
+  logoutBtn.addEventListener("click", () => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(TRASH_KEY);
+    } catch {}
+    const f = document.createElement("form");
+    f.method = "POST";
+    f.action = "/auth/signout";
+    document.body.appendChild(f);
+    f.submit();
+  });
+}
+
+/* ---------- Supabase sync bridge (Etapa 4) ----------
+   O bundle continua trabalhando sobre o localStorage (síncrono, UI instantânea).
+   Esta ponte: (1) ao abrir, carrega os itens DESTE usuário do Supabase pro cache;
+   (2) a cada escrita em vault.items/vault.trash, sincroniza pro servidor (debounce);
+   (3) o logout acima limpa o cache. RLS garante isolamento real no banco. */
+let _applyingRemote = false;
+let _loadedOk = false; // trava: só sincroniza após um load bem-sucedido (anti perda de dados)
+let _syncTimer = null;
+const _origSetItem = localStorage.setItem.bind(localStorage);
+localStorage.setItem = function (key, value) {
+  _origSetItem(key, value);
+  if (!_applyingRemote && (key === STORAGE_KEY || key === TRASH_KEY)) {
+    clearTimeout(_syncTimer);
+    _syncTimer = setTimeout(syncToServer, 800);
+  }
+};
+
+async function syncToServer() {
+  // se o load inicial falhou, NÃO empurra o cache (a reconciliação full-state
+  // poderia apagar os itens do servidor). Espera um load bom primeiro.
+  if (!_loadedOk) return;
+  try {
+    const items = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    const trash = JSON.parse(localStorage.getItem(TRASH_KEY) || "[]");
+    await fetch("/api/items", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items, trash }),
+    });
+  } catch {
+    // offline / falha de rede: fica no cache local e sincroniza na próxima escrita
+  }
+}
+
+async function loadFromServer() {
+  try {
+    const r = await fetch("/api/items");
+    if (!r.ok) return;
+    const { items, trash } = await r.json();
+    _applyingRemote = true;
+    _origSetItem(STORAGE_KEY, JSON.stringify(items || []));
+    _origSetItem(TRASH_KEY, JSON.stringify(trash || []));
+    _applyingRemote = false;
+    _loadedOk = true; // libera o sync só agora (temos o estado real do servidor)
+  } catch {
+    // offline: usa o que estiver no cache local; sync continua travado (sem apagar nada)
+  }
+}
+
 /* ---------- init ---------- */
-applyViewMode();  // restaura modo compacto/timeline salvo
-buildFeed();      // já chama renderCats() internamente
-initDrag();       // ativa drag-to-reorder no modo compacto
-updateTrashChip();
-refreshAiToggle();
+(async () => {
+  await loadFromServer();  // popula o cache com os dados DESTE usuário (RLS)
+  applyViewMode();         // restaura modo compacto/timeline salvo
+  buildFeed();             // já chama renderCats() internamente
+  initDrag();              // ativa drag-to-reorder no modo compacto
+  updateTrashChip();
+  refreshAiToggle();
+})();

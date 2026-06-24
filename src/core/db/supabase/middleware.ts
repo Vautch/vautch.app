@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { hardenCookie } from "./cookie-options";
 
 /**
  * Mantém a sessão fresca a cada request (cookies httpOnly — ADR 0002).
@@ -24,7 +25,7 @@ export async function updateSession(request: NextRequest) {
         );
         response = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options),
+          response.cookies.set(name, value, hardenCookie(options)),
         );
       },
     },
@@ -35,13 +36,23 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Rotas privadas (ativar quando /app e /login existirem):
-  // if (!user && request.nextUrl.pathname.startsWith("/app")) {
-  //   const redirect = request.nextUrl.clone();
-  //   redirect.pathname = "/login";
-  //   return NextResponse.redirect(redirect);
-  // }
-  void user;
+  const path = request.nextUrl.pathname;
+  const isPublic =
+    path === "/login" || path === "/forgot" || path.startsWith("/auth");
+
+  // Sem sessão em rota privada → manda pro login.
+  if (!user && !isPublic) {
+    const redirect = request.nextUrl.clone();
+    redirect.pathname = "/login";
+    return NextResponse.redirect(redirect);
+  }
+
+  // Já logado tentando ver o login → manda pro app.
+  if (user && path === "/login") {
+    const redirect = request.nextUrl.clone();
+    redirect.pathname = "/app";
+    return NextResponse.redirect(redirect);
+  }
 
   return response;
 }
