@@ -5,6 +5,33 @@ Datas em UTC-3 (horário de Brasília).
 
 ## [Não lançado]
 
+## 2026-06-24 (parte 2) — v0.1.2 · hardening + Google OAuth + e-mail
+
+### 🔒 Segurança
+- **Fix de XSS armazenado:** escape de output em título, descrição, URL, imagem
+  (metadados de scraping) e nomes de tag/subtag — no feed, lixeira e menus.
+  As notas já eram escapadas. Defesa canônica (escape no output).
+- Pentest manual confirmou: isolamento por usuário (RLS), token de sessão
+  inacessível por JS (httpOnly), e chave pública bloqueada no acesso direto.
+
+### 🔵 Login com Google (OAuth)
+- Provider Google configurado (Google Cloud + Supabase) e botão ativado.
+- Login social cria a conta na 1ª vez (padrão da indústria) e dispensa
+  confirmação de e-mail (o Google já verificou a posse do e-mail).
+
+### ✨ Polimento
+- **E-mail "Confirm signup" branded** (logo PNG, sem copyright, card
+  centralizado/responsivo, `alt` de fallback) — em `docs/email-templates/`.
+- **Anti-flash:** o rodapé "fim do arquivo" só aparece após carregar os dados
+  (sem flash de estado errado em conta vazia).
+- Callback de auth com mensagem amigável quando o link é aberto em outro
+  dispositivo (confirmação cross-device).
+
+### ⏳ Pendências (não bloqueiam)
+- Custom SMTP (Resend/SendGrid) para entrega de e-mail em produção.
+- Branding da tela de consentimento do Google (app name + logo / custom domain).
+- Cross-device auto-login via `token_hash`.
+
 ## 2026-06-24 — Fase 0: backend de produção (auth + feed no Supabase)
 
 ### ✨ Autenticação

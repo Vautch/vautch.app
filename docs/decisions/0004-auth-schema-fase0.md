@@ -47,8 +47,29 @@ O bundle do protótipo é vanilla e **síncrono** (assume localStorage). Em vez 
 - **Logout limpa o cache** (`vault.items`/`vault.trash`) — anti-vazamento entre contas no mesmo browser.
 - **Isolamento provado** (2 contas no localhost): usuário B vê feed vazio; A mantém os seus. RLS garante no banco.
 
-## 7. Pendências (não bloqueiam a Fase 0)
-- **Google OAuth:** botão e callback prontos; só funciona após configurar Google Cloud Console + Supabase Auth providers.
-- **Confirmação de e-mail:** desligada temporariamente para teste; **religar antes do launch** (system design exige obrigatória).
-- **Import do JSON do protótipo:** o botão "importar" já injeta no cache; com a ponte de sync, o conteúdo sobe pro Supabase. Validar com o export real do Paulo.
-- **Sync multi-aba/multi-device:** a reconciliação full-state assume um cliente por vez; refinar (merge por timestamp) quando houver uso simultâneo.
+## 7. Hardening de segurança (v0.1.2)
+- **XSS armazenado:** título/descrição/url/imagem (metadados de scraping) e nomes
+  de tag/subtag iam pra `innerHTML` sem escape → vetor de XSS (um link malicioso
+  com `<img onerror>` no título executaria no navegador de quem salvasse). Corrigido
+  com escape de output (`escHtml`/`escAttr`) no feed, lixeira e menus. Notas já
+  eram escapadas. Escape no output é a defesa canônica (OWASP).
+- Pentest manual validou: RLS isola por usuário; token httpOnly não é lido por JS;
+  chave pública (publishable) bloqueada no acesso REST direto (`permission denied`).
+
+## 8. Login com Google (OAuth) — v0.1.2
+- Provider configurado: Google Cloud (OAuth client Web, redirect
+  `https://<ref>.supabase.co/auth/v1/callback`) + Supabase Auth → Google.
+- Botão liberado via `GOOGLE_ENABLED` em `login-form.tsx`.
+- **Login social = cadastro + login** (cria conta na 1ª vez) e **dispensa
+  confirmação de e-mail** (o Google já verifica a posse). Padrão da indústria, seguro.
+- Cosmético pendente: a tela de consentimento mostra o domínio `*.supabase.co`;
+  some com branding completo (app name + logo) ou custom domain do Supabase (pago).
+
+## 9. Pendências (não bloqueiam)
+- **Custom SMTP** (Resend/SendGrid) para entrega de e-mail em produção (hoje:
+  SMTP nativo do Supabase, ok p/ volume baixo). Template branded em `docs/email-templates/`.
+- **Confirmação de e-mail:** religada (obrigatória) para cadastro e-mail/senha.
+- **Cross-device auto-login:** confirmar via `token_hash` (verifyOtp) em vez do
+  fluxo PKCE `code` — hoje, abrir o link em outro dispositivo pede login manual.
+- **Import do JSON do protótipo:** validado (sobe pro Supabase antes do reload).
+- **Sync multi-aba/multi-device:** reconciliação full-state assume um cliente por vez.
