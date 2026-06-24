@@ -2806,6 +2806,60 @@ window.addEventListener("message", e => {
   });
 });
 
+/* ---------- Export / Import ---------- */
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    items: loadJSON(STORAGE_KEY, []),
+    trash: loadJSON(TRASH_KEY, []),
+    cats: loadCats(),
+    catOverrides: loadCatOverrides(),
+    subOverrides: loadSubOverrides(),
+    order: loadOrder(),
+    learn: loadLearn(),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "vautch-export-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById("importFile").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!data.version || !Array.isArray(data.items)) {
+        alert("Arquivo inválido — não parece ser um export do Vautch.");
+        return;
+      }
+      const existing = loadJSON(STORAGE_KEY, []);
+      const existingIds = new Set(existing.map(i => i.id));
+      const newItems = data.items.filter(i => !existingIds.has(i.id));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...existing, ...newItems]));
+      if (Array.isArray(data.trash)) {
+        const existingTrash = loadJSON(TRASH_KEY, []);
+        const trashIds = new Set(existingTrash.map(i => i.id));
+        localStorage.setItem(TRASH_KEY, JSON.stringify([...existingTrash, ...data.trash.filter(i => !trashIds.has(i.id))]));
+      }
+      if (Array.isArray(data.cats)) {
+        localStorage.setItem(CATS_KEY, JSON.stringify([...new Set([...loadCats(), ...data.cats])]));
+      }
+      alert(`Importação concluída: ${newItems.length} itens novos adicionados (${data.items.length - newItems.length} duplicatas ignoradas).`);
+      location.reload();
+    } catch {
+      alert("Erro ao ler o arquivo. Verifique se é um JSON válido.");
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+
 /* ---------- init ---------- */
 applyViewMode();  // restaura modo compacto/timeline salvo
 buildFeed();      // já chama renderCats() internamente

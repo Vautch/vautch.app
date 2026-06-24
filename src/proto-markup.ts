@@ -40,6 +40,13 @@ export const BODY_HTML = `
     <button class="menu-item menu-disabled" disabled>
       <span>sincronizar na nuvem</span><span class="menu-state">em breve</span>
     </button>
+    <button class="menu-item" id="exportBtn">
+      <span>exportar dados</span><span class="menu-state">↓ JSON</span>
+    </button>
+    <label class="menu-item" id="importLabel" style="cursor:pointer;">
+      <span>importar dados</span><span class="menu-state">↑ JSON</span>
+      <input type="file" id="importFile" accept=".json" style="display:none;">
+    </label>
   </div>
 </div>
 
