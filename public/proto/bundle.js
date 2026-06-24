@@ -728,9 +728,17 @@ const ICON_EXTERNAL = `<svg viewBox="0 0 10 10" fill="currentColor" xmlns="http:
 const TAG_MAX = 26;
 function truncTag(s, max = TAG_MAX) {
   s = String(s || "");
-  return s.length > max ? s.slice(0, max - 1).trimEnd() + "…" : s;
+  const t = s.length > max ? s.slice(0, max - 1).trimEnd() + "…" : s;
+  return escHtml(t); // sempre vai pra innerHTML como texto de tag/subtag
 }
-function escAttr(s) { return String(s || "").replace(/"/g, "&quot;"); }
+function escAttr(s) { return String(s || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;"); }
+// escape de HTML p/ texto vindo de fonte externa (metadados scrapeados) antes de
+// ir pra innerHTML — defesa contra XSS armazenado. Ver ADR 0002.
+function escHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
 
 // favicon do site de origem — resolvido automaticamente pelo domínio (não
 // hardcode de logo). item.url vem sem protocolo: "instagram.com/p/…"
@@ -760,17 +768,17 @@ function cardHTML(item) {
   if (item.type === "note") {
     body = `<div class="note-body">${renderNote(item.text || "")}</div>`;
   } else if (item.type === "quote") {
-    body = `<p class="card-quote">${item.quote}</p><p class="card-body" style="margin-top:10px">${item.body || ""}</p>`;
+    body = `<p class="card-quote">${escHtml(item.quote)}</p><p class="card-body" style="margin-top:10px">${escHtml(item.body || "")}</p>`;
   } else if (item.type === "recipe") {
-    body = `<h2 class="card-title">${item.title}</h2>
-      <ul class="card-list">${item.list.map(i => `<li>${i}</li>`).join("")}</ul>`;
+    body = `<h2 class="card-title">${escHtml(item.title)}</h2>
+      <ul class="card-list">${(item.list || []).map(i => `<li>${escHtml(i)}</li>`).join("")}</ul>`;
   } else {
     const media = item.isPrivate
       ? `<div class="card-private-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>`
       : item.embed
         ? item.embed
         : item.image
-          ? `<div class="card-thumb card-thumb-img"><img src="${item.image}" alt="" loading="lazy"></div>`
+          ? `<div class="card-thumb card-thumb-img"><img src="${escAttr(item.image)}" alt="" loading="lazy"></div>`
           : item.thumb ? `<div class="card-thumb ${item.thumb}"></div>` : "";
     const statParts = item.stats ? [
       item.stats.views    ? `<span title="visualizações">▶ ${item.stats.views}</span>` : "",
@@ -786,11 +794,11 @@ function cardHTML(item) {
       : "";
     // miniatura usada só no modo compacto (poster do vídeo / print salvo)
     const cthumb = item.image
-      ? `<div class="card-cthumb"><img src="${item.image}" alt="" loading="lazy"></div>`
+      ? `<div class="card-cthumb"><img src="${escAttr(item.image)}" alt="" loading="lazy"></div>`
       : "";
     body = `${media}${cthumb}
-      <h2 class="card-title"${editable}>${item.title || "Sem título"}</h2>
-      <p class="card-body"${editableBody}>${item.body || ""}</p>
+      <h2 class="card-title"${editable}>${escHtml(item.title || "Sem título")}</h2>
+      <p class="card-body"${editableBody}>${escHtml(item.body || "")}</p>
       ${stats}`;
   }
 
@@ -801,14 +809,14 @@ function cardHTML(item) {
   const action = item.type === "note"
     ? `<button class="note-edit card-link">editar</button>`
     : item.url
-      ? `<a class="card-link" href="https://${item.url}" target="_blank" rel="noopener"><span class="card-link-ico">${ICON_EXTERNAL}</span>abrir original</a>`
+      ? `<a class="card-link" href="https://${escAttr(item.url)}" target="_blank" rel="noopener"><span class="card-link-ico">${ICON_EXTERNAL}</span>abrir original</a>`
       : "";
   const reportBtn = item.embed
     ? `<button class="card-report" title="reportar problema de visualização" aria-label="reportar">!</button>`
     : "";
   const footer = `
     <div class="card-footer">
-      <span class="card-time">${item.time}</span>
+      <span class="card-time">${escHtml(item.time)}</span>
       <div class="card-footer-right">${reportBtn}${action}${fav}</div>
     </div>`;
 
@@ -1675,14 +1683,14 @@ function openTagDropdown(cat, chipEl) {
   const render = () => {
     const subs = subcatsOf(cat);
     const subsHTML = subs.length ? `<div class="dd-div"></div><div class="dd-subs">
-        ${subs.map(s => `<div class="dd-sub-row" data-sub="${s}">
-            <button class="sub-opt${activeSub === s ? " is-active" : ""}" data-sub="${s}">${s}</button>
+        ${subs.map(s => `<div class="dd-sub-row" data-sub="${escAttr(s)}">
+            <button class="sub-opt${activeSub === s ? " is-active" : ""}" data-sub="${escAttr(s)}">${escHtml(s)}</button>
             <button class="dd-mini" data-act="edit-sub" title="editar">✎</button>
             <button class="dd-mini dd-danger" data-act="del-sub" title="excluir subtag">${TRASH_ICO}</button>
           </div>`).join("")}
       </div>` : "";
     dd.innerHTML = `<div class="dd-head-row">
-        <button class="dd-head-name${!activeSub ? " is-active" : ""}" data-act="all">${cat}</button>
+        <button class="dd-head-name${!activeSub ? " is-active" : ""}" data-act="all">${escHtml(cat)}</button>
         <button class="dd-mini" data-act="edit-cat" title="editar">✎</button>
         <button class="dd-mini dd-danger" data-act="del-cat" title="excluir tag">${TRASH_ICO}</button>
       </div>${subsHTML}`;
@@ -1693,7 +1701,7 @@ function openTagDropdown(cat, chipEl) {
   const showEdit = (rowEl, val, onSave) => {
     const el = document.createElement("div");
     el.className = "dd-edit-row";
-    el.innerHTML = `<input class="dd-edit-inp" value="${val}" maxlength="24" spellcheck="false">
+    el.innerHTML = `<input class="dd-edit-inp" value="${escAttr(val)}" maxlength="24" spellcheck="false">
       <button class="dd-mini" data-act="save-edit" title="salvar">✓</button>
       <button class="dd-mini" data-act="cancel-edit" title="cancelar">✕</button>`;
     const inp = el.querySelector("input");
@@ -1850,8 +1858,8 @@ function openCatMenu(card, item, anchor) {
     if (!cat) return "";
     const subs = subcatsOf(cat);
     return `<div class="sub-section-inner">
-      <div class="cat-sub-head mono">subtag em ${cat}</div>
-      ${subs.map(s => `<button class="sub-option${s === currentSub ? " is-current" : ""}" data-sub="${s}">${s}</button>`).join("")}
+      <div class="cat-sub-head mono">subtag em ${escHtml(cat)}</div>
+      ${subs.map(s => `<button class="sub-option${s === currentSub ? " is-current" : ""}" data-sub="${escAttr(s)}">${escHtml(s)}</button>`).join("")}
       ${currentSub ? `<button class="sub-option sub-none" data-sub="">— sem subtag</button>` : ""}
       <div class="cat-new">
         <input type="text" class="sub-input" placeholder="nova subtag…" maxlength="24">
@@ -1863,7 +1871,7 @@ function openCatMenu(card, item, anchor) {
   const cats = [...new Set([...presentCats(), item.cat].filter(Boolean))];
   menu.innerHTML = `
     <div class="cat-sub-head mono">tag</div>
-    ${cats.map(c => `<button class="cat-option${c === item.cat ? " is-current" : ""}" data-cat="${c}">${c}</button>`).join("")}
+    ${cats.map(c => `<button class="cat-option${c === item.cat ? " is-current" : ""}" data-cat="${escAttr(c)}">${escHtml(c)}</button>`).join("")}
     <div class="cat-new">
       <input type="text" placeholder="nova tag…" maxlength="24">
       <button class="cat-create">criar</button>
@@ -1992,7 +2000,7 @@ function chipEl(cat, label) {
   b.className = "chip";
   b.dataset.cat = cat;
   const hasSubs = cat !== "tudo" && cat !== "__trash" && subcatsOf(cat).length > 0;
-  b.innerHTML = `${label}${hasSubs ? '<span class="chip-sub-mark" aria-hidden="true">+</span>' : ""}`;
+  b.innerHTML = `${escHtml(label)}${hasSubs ? '<span class="chip-sub-mark" aria-hidden="true">+</span>' : ""}`;
   if (cat === activeCat) b.classList.add("is-active");
   return b;
 }
@@ -2164,15 +2172,15 @@ function renderTrash() {
     row.className = "card card-trash";
     row.innerHTML = `
       <div class="card-top">
-        <label class="t-check"><input type="checkbox" data-id="${item.id}"></label>
-        <span class="card-source source-${item.source}"><span class="source-icon">${SOURCE_ICONS[item.source] || SOURCE_ICONS.web}</span>${sourceLabel(item.source)}</span>
+        <label class="t-check"><input type="checkbox" data-id="${escAttr(item.id)}"></label>
+        <span class="card-source source-${escAttr(item.source)}"><span class="source-icon">${SOURCE_ICONS[item.source] || SOURCE_ICONS.web}</span>${escHtml(sourceLabel(item.source))}</span>
         <div class="card-top-right">
           <button class="card-restore mono" title="devolver ao vautch">↩ restaurar</button>
           <button class="card-purge mono" title="excluir para sempre">🗑 excluir</button>
         </div>
       </div>
-      <h2 class="card-title" style="font-size:19px">${item.title || "Sem título"}</h2>
-      ${item.url ? `<a class="card-link" href="https://${item.url}" target="_blank" rel="noopener">${item.url.slice(0, 60)}</a>` : ""}`;
+      <h2 class="card-title" style="font-size:19px">${escHtml(item.title || "Sem título")}</h2>
+      ${item.url ? `<a class="card-link" href="https://${escAttr(item.url)}" target="_blank" rel="noopener">${escHtml(item.url.slice(0, 60))}</a>` : ""}`;
 
     const cb = row.querySelector('input[type="checkbox"]');
     cb.addEventListener("change", () => {
@@ -2554,7 +2562,7 @@ async function saveNote(text) {
     text,
     time: "guardado agora mesmo",
     url: null
-  }, `✦ nota guardada em <strong>${cat}</strong>`);
+  }, `✦ nota guardada em <strong>${escHtml(cat)}</strong>`);
 }
 
 // comprime a imagem no navegador antes de guardar: redimensiona até no
@@ -2710,7 +2718,7 @@ form.addEventListener("submit", async e => {
   const card = makeCard(newItem, true);
   firstMark.after(card);
 
-  setStatus(`✦ guardado em <strong>${cat}</strong>${meta ? "" : " (não consegui ler os detalhes do link)"}`, false);
+  setStatus(`✦ guardado em <strong>${escHtml(cat)}</strong>${meta ? "" : " (não consegui ler os detalhes do link)"}`, false);
   setTimeout(() => { status.innerHTML = ""; }, 4000);
 
   updateCount();
@@ -2940,4 +2948,5 @@ async function loadFromServer() {
   initDrag();              // ativa drag-to-reorder no modo compacto
   updateTrashChip();
   refreshAiToggle();
+  document.documentElement.classList.add("app-ready"); // libera o endcap (anti-flash)
 })();

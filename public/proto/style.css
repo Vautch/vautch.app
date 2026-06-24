@@ -1921,6 +1921,9 @@ body.view-compact .card.is-animating { overflow: hidden; }
   padding: 0 24px;
   text-align: center;
 }
+/* anti-flash: o "fim do arquivo" é HTML estático (server) — esconde até o
+   bundle carregar os dados e decidir o estado real (evita flash em conta vazia). */
+html:not(.app-ready) .endcap { display: none; }
 
 .endcap-line {
   width: 60px; height: 1px;

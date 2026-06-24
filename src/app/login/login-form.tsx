@@ -24,9 +24,8 @@ export function LoginForm() {
 
   const isLogin = mode === "in";
 
-  // Google OAuth: botão pronto, mas escondido até configurar o provider no
-  // Supabase + Google Cloud Console. Trocar pra true quando estiver ligado.
-  const GOOGLE_ENABLED = false;
+  // Google OAuth: ativado após configurar o provider no Supabase + Google Cloud.
+  const GOOGLE_ENABLED = true;
 
   async function handleGoogle(): Promise<void> {
     setGoogleBusy(true);

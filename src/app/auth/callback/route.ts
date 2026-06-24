@@ -16,6 +16,10 @@ export async function GET(request: Request): Promise<NextResponse> {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`);
     }
+    // code presente mas troca falhou — caso clássico: link aberto em OUTRO
+    // dispositivo (o verifier PKCE fica no aparelho que iniciou). O e-mail já
+    // foi confirmado pelo Supabase; só falta logar aqui. Mensagem amigável.
+    return NextResponse.redirect(`${origin}/login?message=link-ok`);
   }
 
   return NextResponse.redirect(`${origin}/login?error=auth`);

@@ -1,0 +1,52 @@
+<!--
+  Vautch — template de e-mail "Confirm signup".
+  Onde colar: Supabase → Authentication → Emails → "Confirm signup" → Message body.
+  Variável do Supabase: {{ .ConfirmationURL }}.
+
+  Compatibilidade: tabelas + estilos inline (regra de ouro do HTML de e-mail).
+  Logo em PNG (SVG não renderiza em Gmail/Outlook) hospedado no próprio app;
+  alt="vautch" garante o nome mesmo se o cliente bloquear imagens.
+  Sombra/raio degradam graciosamente onde não houver suporte (Outlook).
+-->
+<table role="presentation" width="100%" height="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4efe6;margin:0;padding:0;width:100%;height:100%;">
+  <tr>
+    <td align="center" valign="middle" style="padding:40px 16px;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+
+      <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="width:480px;max-width:100%;background:#fdfbf6;border-radius:18px;box-shadow:0 8px 30px rgba(31,27,22,.12);">
+        <tr>
+          <td style="padding:46px 40px 0;text-align:center;">
+            <img src="https://vautch-app.vercel.app/assets/logo/vautch-email.png" alt="vautch" width="210" style="width:210px;max-width:62%;height:auto;display:inline-block;border:0;outline:none;text-decoration:none;" />
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 40px 0;text-align:center;">
+            <p style="margin:0;color:#5c5446;font-size:15px;font-style:italic;">tudo que você amou, num lugar só.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 44px 0;">
+            <h1 style="margin:0 0 12px;color:#1f1b16;font-size:22px;font-weight:700;">Confirme seu e-mail</h1>
+            <p style="margin:0;color:#5c5446;font-size:15px;line-height:1.6;">
+              Bem-vindo ao Vautch. Falta só um passo: confirme seu e-mail para
+              ativar sua conta e começar a guardar tudo que importa pra você.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:28px 44px 6px;text-align:center;">
+            <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#1f1b16;color:#f4efe6;text-decoration:none;font-size:16px;font-weight:700;padding:15px 38px;border-radius:999px;">Confirmar meu e-mail</a>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:22px 44px 46px;text-align:center;">
+            <p style="margin:0;color:#968b78;font-size:12.5px;line-height:1.6;">
+              Se você não criou uma conta no Vautch, pode ignorar este e-mail.<br>
+              Este link expira em alguns minutos.
+            </p>
+          </td>
+        </tr>
+      </table>
+
+    </td>
+  </tr>
+</table>

@@ -39,6 +39,12 @@ export default async function LoginPage({
           entrar.
         </p>
       ) : null}
+      {sp.message === "link-ok" ? (
+        <p className={styles.message}>
+          E-mail confirmado! Faça login aqui para entrar (você abriu o link em
+          outro dispositivo).
+        </p>
+      ) : null}
 
       <LoginForm />
     </main>
