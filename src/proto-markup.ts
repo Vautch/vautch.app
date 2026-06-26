@@ -57,6 +57,9 @@ export const BODY_HTML = `
   <form class="intake-form" id="intakeForm" autocomplete="off">
     <div class="intake-field" data-mode="save">
       <textarea id="intakeInput" rows="1" placeholder="cole, escreva ou busque…" spellcheck="false"></textarea>
+      <button type="button" class="intake-clear" id="intakeClear" title="limpar" aria-label="limpar campo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
       <button type="button" class="intake-cam" id="camBtn" title="adicionar imagem / foto" aria-label="adicionar imagem">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2L8 4.5h8L17.5 7h2A1.5 1.5 0 0 1 21 8.5v10A1.5 1.5 0 0 1 19.5 20h-15A1.5 1.5 0 0 1 3 18.5z"/><circle cx="12" cy="13" r="3.5"/></svg>
       </button>
@@ -86,6 +89,13 @@ export const BODY_HTML = `
     <!-- view, filtro e lixeira (fixos, não rolam no mobile) -->
   </div>
 </div>
+
+<!-- F1: lembrete ao voltar (itens guardados desde a última visita) — fora do #feed
+     pra sobreviver ao feed.innerHTML="" do buildFeed; preenchido via JS -->
+<section class="home-block morning" id="morningReminder" hidden></section>
+
+<!-- F2: carrossel "relembre" (itens aleatórios, scroll horizontal) -->
+<section class="home-block remember" id="rememberCarousel" hidden></section>
 
 <main class="feed" id="feed"></main>
 

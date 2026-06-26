@@ -3,6 +3,7 @@ import { createClient } from "@/core/db/supabase/server";
 
 type Item = Record<string, unknown> & { id?: unknown };
 type Row = { user_id: string; id: string; data: Item; deleted_at: string | null };
+type RowRead = { id: string; data: Item; deleted_at: string | null; created_at: string };
 
 /**
  * Camada de dados da timeline. O bundle (client) chama estas rotas; a auth é
@@ -23,14 +24,20 @@ export async function GET(): Promise<NextResponse> {
 
   const { data, error } = await supabase
     .from("items")
-    .select("id, data, deleted_at")
-    .order("created_at", { ascending: false });
+    .select("id, data, deleted_at, created_at")
+    // created_at DESC + id DESC: o tie-break por id evita ordem instável quando
+    // vários itens compartilham o mesmo created_at (ex.: import em lote). Ver B1.
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const items: Item[] = [];
   const trash: Item[] = [];
-  for (const row of data ?? []) {
-    const item: Item = { ...(row.data as Item), id: row.id };
+  for (const row of (data ?? []) as RowRead[]) {
+    // createdAt REAL chega ao client (destrava datas reais B5, ordem B1, lembrete F1).
+    // Prefere o createdAt já gravado no jsonb; cai pro created_at do banco (itens legados).
+    const createdAt = (row.data?.createdAt as string | undefined) ?? row.created_at;
+    const item: Item = { ...row.data, id: row.id, createdAt };
     if (row.deleted_at) trash.push(item);
     else items.push(item);
   }

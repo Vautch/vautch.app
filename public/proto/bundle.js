@@ -24,20 +24,44 @@ function detectSource(raw) {
 
 /* ---------- embed real por plataforma ---------- */
 
-// Remove parâmetros de RASTREAMENTO da URL (utm_*, ig_rid, fbclid, gclid, …)
-// preservando os FUNCIONAIS (v=, t=, list=, img_index= dos carrosséis, etc.).
-// Mantém caminho e hash. Usado antes de montar o embed (o Facebook recebe a URL
-// inteira via href=) e ao guardar a URL ("abrir original" limpo). Não muda a
-// engenharia dos embeds — IG/YouTube/etc. já extraem o ID por regex.
-const TRACKING_PARAMS = new Set(["ig_rid", "igshid", "igsh", "fbclid", "gclid", "gclsrc", "dclid", "mc_cid", "mc_eid", "_gl", "msclkid", "yclid", "twclid"]);
+// Limpa a URL de parâmetros de RASTREAMENTO. Estratégia HÍBRIDA (B6):
+//   • Plataforma conhecida (IG/YouTube/FB/TikTok/…): ALLOWLIST — mantém só os
+//     params funcionais e remove TODO o resto. Robusto a params novos de boost/
+//     share da Meta (mibextid, rdid, eav, _rdr, si…) que uma denylist nunca
+//     acompanha e que quebram o embed do Facebook (href via plugins/video.php).
+//   • Host genérico (web): DENYLIST — preserva o link (params podem ser
+//     funcionais, ex.: ?id=123) e tira só rastreadores conhecidos (utm_*, fbclid…).
+// Mantém caminho e hash. Não muda a engenharia dos embeds — os IDs já saem por regex.
+const TRACKING_PARAMS = new Set(["ig_rid", "igshid", "igsh", "fbclid", "gclid", "gclsrc", "dclid", "mc_cid", "mc_eid", "_gl", "msclkid", "yclid", "twclid", "mibextid", "rdid", "eav", "_rdr", "si"]);
+// host (sem www/m/mobile) → params funcionais a PRESERVAR. [] = zera a query.
+const PLATFORM_KEEP = [
+  ["youtu.be", ["t"]],
+  ["youtube.com", ["v", "t", "start", "list", "index"]],
+  ["instagram.com", ["img_index"]],   // carrossel
+  ["facebook.com", ["v"]],            // watch?v=ID
+  ["fb.watch", []],
+  ["tiktok.com", []],
+  ["vimeo.com", ["h"]],               // hash de vídeo não listado
+  ["x.com", []],
+  ["twitter.com", []],
+  ["threads.net", []],
+  ["threads.com", []],
+];
+function keepSetFor(host) {
+  const h = host.replace(/^www\.|^m\.|^mobile\./, "");
+  const hit = PLATFORM_KEEP.find(([dom]) => h === dom || h.endsWith("." + dom));
+  return hit ? new Set(hit[1]) : null; // null = host genérico (denylist)
+}
 function stripTracking(raw) {
   if (!raw) return raw;
   try {
     const hasProto = /^https?:\/\//i.test(raw);
     const u = new URL(hasProto ? raw : `https://${raw}`);
+    const keep = keepSetFor(u.hostname.toLowerCase());
     [...u.searchParams.keys()].forEach(k => {
       const lk = k.toLowerCase();
-      if (lk.startsWith("utm_") || TRACKING_PARAMS.has(lk)) u.searchParams.delete(k);
+      const drop = keep ? !keep.has(lk) : (lk.startsWith("utm_") || TRACKING_PARAMS.has(lk));
+      if (drop) u.searchParams.delete(k);
     });
     const out = u.toString().replace(/\?(?=#|$)/, ""); // tira "?" pendente sem query
     return hasProto ? out : out.replace(/^https?:\/\//, "");
@@ -696,6 +720,40 @@ function updateSavedField(id, field, value) {
   }
 }
 
+/* ---------- F2d: tracking de interação ("esquecidos") ---------- */
+// Grava por item QUANDO foi visto pela última vez e quantas vezes, pra o relembre
+// puxar os MENOS vistos / mais antigos (em vez de aleatório). Device-local: a chave
+// vault.seen NÃO entra na ponte de sync (igual vault.lastSeen). Só itens do usuário
+// (ids "v<...>"); seeds são ignorados.
+const SEEN_KEY = "vault.seen";
+const DWELL_MS = 60000;        // "ficou >1min" olhando o card no viewport
+
+function loadSeen() { return loadJSON(SEEN_KEY, {}); }
+
+function markSeen(id) {
+  if (!id || id.startsWith("seed-")) return;
+  const seen = loadSeen();
+  const rec = seen[id] || { opens: 0, lastSeen: 0 };
+  rec.opens = (rec.opens || 0) + 1;
+  rec.lastSeen = Date.now();
+  seen[id] = rec;
+  localStorage.setItem(SEEN_KEY, JSON.stringify(seen));
+}
+
+// dwell: marca como visto quando o card fica ≥60% visível por > DWELL_MS.
+const _dwellTimers = new WeakMap();
+const dwellObserver = new IntersectionObserver(entries => {
+  entries.forEach(en => {
+    const card = en.target;
+    if (en.isIntersecting && en.intersectionRatio >= 0.6) {
+      if (!_dwellTimers.has(card)) _dwellTimers.set(card, setTimeout(() => markSeen(card.dataset.id), DWELL_MS));
+    } else {
+      const t = _dwellTimers.get(card);
+      if (t) { clearTimeout(t); _dwellTimers.delete(card); }
+    }
+  });
+}, { threshold: [0, 0.6, 1] });
+
 /* ---------- render ---------- */
 
 function sourceLabel(s) {
@@ -721,6 +779,8 @@ const ICON_COMPRESS = `<svg viewBox="0 0 13 13" fill="currentColor" xmlns="http:
 const ICON_DRAG     = `<svg viewBox="0 0 10 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M3 1.5C3 1.79667 2.91203 2.08668 2.74721 2.33336C2.58238 2.58003 2.34812 2.77229 2.07403 2.88582C1.79994 2.99935 1.49834 3.02906 1.20737 2.97118C0.916394 2.9133 0.64912 2.77044 0.439341 2.56066C0.229562 2.35088 0.0867006 2.08361 0.0288228 1.79264C-0.0290551 1.50166 0.000649922 1.20006 0.114181 0.925976C0.227713 0.651886 0.419972 0.417619 0.666646 0.252797C0.913319 0.0879744 1.20333 0 1.5 0C1.89783 0 2.27936 0.158036 2.56066 0.439341C2.84197 0.720645 3 1.10218 3 1.5ZM8.25 3C8.54667 3 8.83668 2.91203 9.08336 2.74721C9.33003 2.58238 9.52229 2.34811 9.63582 2.07403C9.74935 1.79994 9.77906 1.49834 9.72118 1.20737C9.6633 0.916394 9.52044 0.649119 9.31066 0.439341C9.10088 0.229562 8.83361 0.0867006 8.54264 0.0288228C8.25167 -0.0290551 7.95006 0.000649922 7.67598 0.114181C7.40189 0.227713 7.16762 0.419972 7.0028 0.666646C6.83797 0.913319 6.75 1.20333 6.75 1.5C6.75 1.89783 6.90804 2.27936 7.18934 2.56066C7.47065 2.84197 7.85218 3 8.25 3ZM1.5 6.375C1.20333 6.375 0.913319 6.46297 0.666646 6.6278C0.419972 6.79262 0.227713 7.02689 0.114181 7.30098C0.000649922 7.57506 -0.0290551 7.87666 0.0288228 8.16764C0.0867006 8.45861 0.229562 8.72588 0.439341 8.93566C0.64912 9.14544 0.916394 9.2883 1.20737 9.34618C1.49834 9.40406 1.79994 9.37435 2.07403 9.26082C2.34812 9.14729 2.58238 8.95503 2.74721 8.70836C2.91203 8.46168 3 8.17167 3 7.875C3 7.47718 2.84197 7.09565 2.56066 6.81434C2.27936 6.53304 1.89783 6.375 1.5 6.375ZM8.25 6.375C7.95333 6.375 7.66332 6.46297 7.41665 6.6278C7.16997 6.79262 6.97771 7.02689 6.86418 7.30098C6.75065 7.57506 6.72095 7.87666 6.77882 8.16764C6.8367 8.45861 6.97956 8.72588 7.18934 8.93566C7.39912 9.14544 7.66639 9.2883 7.95737 9.34618C8.24834 9.40406 8.54994 9.37435 8.82403 9.26082C9.09812 9.14729 9.33238 8.95503 9.49721 8.70836C9.66203 8.46168 9.75 8.17167 9.75 7.875C9.75 7.47718 9.59197 7.09565 9.31066 6.81434C9.02936 6.53304 8.64783 6.375 8.25 6.375ZM1.5 12.75C1.20333 12.75 0.913319 12.838 0.666646 13.0028C0.419972 13.1676 0.227713 13.4019 0.114181 13.676C0.000649922 13.9501 -0.0290551 14.2517 0.0288228 14.5426C0.0867006 14.8336 0.229562 15.1009 0.439341 15.3107C0.64912 15.5204 0.916394 15.6633 1.20737 15.7212C1.49834 15.7791 1.79994 15.7494 2.07403 15.6358C2.34812 15.5223 2.58238 15.33 2.74721 15.0834C2.91203 14.8367 3 14.5467 3 14.25C3 13.8522 2.84197 13.4706 2.56066 13.1893C2.27936 12.908 1.89783 12.75 1.5 12.75ZM8.25 12.75C7.95333 12.75 7.66332 12.838 7.41665 13.0028C7.16997 13.1676 6.97771 13.4019 6.86418 13.676C6.75065 13.9501 6.72095 14.2517 6.77882 14.5426C6.8367 14.8336 6.97956 15.1009 7.18934 15.3107C7.39912 15.5204 7.66639 15.6633 7.95737 15.7212C8.24834 15.7791 8.54994 15.7494 8.82403 15.6358C9.09812 15.5223 9.33238 15.33 9.49721 15.0834C9.66203 14.8367 9.75 14.5467 9.75 14.25C9.75 13.8522 9.59197 13.4706 9.31066 13.1893C9.02936 12.908 8.64783 12.75 8.25 12.75Z"/></svg>`;
 const ICON_CHEVRON  = `<svg viewBox="0 0 5 9" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M4.87781 4.78942L0.711611 8.88012C0.672902 8.91813 0.626949 8.94827 0.576374 8.96884C0.525799 8.98941 0.471593 9 0.416852 9C0.36211 9 0.307904 8.98941 0.257329 8.96884C0.206755 8.94827 0.160801 8.91813 0.122093 8.88012C0.0833846 8.84211 0.0526795 8.79699 0.0317308 8.74733C0.010782 8.69768 0 8.64445 0 8.5907C0 8.53695 0.010782 8.48373 0.0317308 8.43407C0.0526795 8.38441 0.0833846 8.33929 0.122093 8.30128L3.99406 4.5L0.122093 0.698715C0.043918 0.621957 0 0.51785 0 0.409298C0 0.300745 0.043918 0.196639 0.122093 0.11988C0.200268 0.0431223 0.306296 0 0.416852 0C0.527408 0 0.633436 0.0431223 0.711611 0.11988L4.87781 4.21058C4.91655 4.24857 4.94728 4.29369 4.96824 4.34335C4.98921 4.39301 5 4.44624 5 4.5C5 4.55376 4.98921 4.60699 4.96824 4.65665C4.94728 4.70631 4.91655 4.75143 4.87781 4.78942Z"/></svg>`;
 const ICON_EXTERNAL = `<svg viewBox="0 0 10 10" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.33333 5.41667V9.16667C8.33333 9.38768 8.24554 9.59964 8.08926 9.75592C7.93297 9.9122 7.72101 10 7.5 10H0.833333C0.61232 10 0.400358 9.9122 0.244078 9.75592C0.0877973 9.59964 0 9.38768 0 9.16667V2.5C0 2.27899 0.0877973 2.06702 0.244078 1.91074C0.400358 1.75446 0.61232 1.66667 0.833333 1.66667H4.58333C4.69384 1.66667 4.79982 1.71057 4.87796 1.78871C4.9561 1.86685 5 1.97283 5 2.08333C5 2.19384 4.9561 2.29982 4.87796 2.37796C4.79982 2.4561 4.69384 2.5 4.58333 2.5H0.833333V9.16667H7.5V5.41667C7.5 5.30616 7.5439 5.20018 7.62204 5.12204C7.70018 5.0439 7.80616 5 7.91667 5C8.02717 5 8.13315 5.0439 8.21129 5.12204C8.28943 5.20018 8.33333 5.30616 8.33333 5.41667ZM10 0.416667C10 0.30616 9.9561 0.200179 9.87796 0.122039C9.79982 0.0438989 9.69384 0 9.58333 0H6.25C6.16754 -0.0000647615 6.08692 0.0243372 6.01834 0.0701166C5.94976 0.115896 5.8963 0.180995 5.86474 0.257171C5.83318 0.333347 5.82493 0.417176 5.84103 0.498045C5.85713 0.578913 5.89687 0.653185 5.95521 0.711458L7.3276 2.08333L5.12187 4.28854C5.04369 4.36672 4.99977 4.47276 4.99977 4.58333C4.99977 4.6939 5.04369 4.79994 5.12187 4.87813C5.20006 4.95631 5.3061 5.00023 5.41667 5.00023C5.52723 5.00023 5.63327 4.95631 5.71146 4.87813L7.91667 2.6724L9.28854 4.04479C9.34681 4.10313 9.42109 4.14287 9.50196 4.15897C9.58282 4.17507 9.66665 4.16682 9.74283 4.13526C9.81901 4.1037 9.8841 4.05024 9.92988 3.98166C9.97566 3.91308 10.0001 3.83246 10 3.75V0.416667Z"/></svg>`;
+// estrela do favorito (F3) — fill via CSS (vazada quando off, sólida quando on)
+const ICON_STAR     = `<svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.5l2.9 5.88 6.49.94-4.7 4.58 1.11 6.46L12 17.82l-5.8 3.04 1.11-6.46-4.7-4.58 6.49-.94L12 2.5z"/></svg>`;
 
 // limite de caracteres da tag/subtag dentro do card: generoso, mas com
 // reticências p/ nunca empurrar/cobrir os ícones do canto direito (o CSS
@@ -758,17 +818,21 @@ function cardHTML(item) {
   const dragHandle = `<span class="card-drag" aria-hidden="true">${ICON_DRAG}</span>`;
   // botão expandir/comprimir (só no compacto, via CSS) — ícone inicial = expandir
   const foldBtn = `<button class="card-fold" title="expandir / comprimir" aria-label="expandir ou comprimir">${ICON_EXPAND}</button>`;
+  // F3: botão de favorito (estrela) — destaca e prioriza o item no topo do feed
+  const favBtn = item.id
+    ? `<button class="card-fav-btn${item.fav ? " is-on" : ""}" title="${item.fav ? "remover destaque" : "destacar"}" aria-label="destacar" aria-pressed="${item.fav ? "true" : "false"}">${ICON_STAR}</button>`
+    : "";
   const top = `
     <div class="card-top">
       <span class="card-tags">${cat}${sub}</span>
-      <span class="card-top-right">${foldBtn}<button class="card-del" title="excluir do vautch" aria-label="excluir">×</button></span>
+      <span class="card-top-right">${favBtn}${foldBtn}<button class="card-del" title="excluir do vautch" aria-label="excluir">×</button></span>
     </div>`;
 
   let body = "";
   if (item.type === "note") {
-    body = `<div class="note-body">${renderNote(item.text || "")}</div>`;
+    body = `<div class="note-body" title="${escAttr(item.text || "")}">${renderNote(item.text || "")}</div>`;
   } else if (item.type === "quote") {
-    body = `<p class="card-quote">${escHtml(item.quote)}</p><p class="card-body" style="margin-top:10px">${escHtml(item.body || "")}</p>`;
+    body = `<p class="card-quote" title="${escAttr(item.quote || "")}">${escHtml(item.quote)}</p><p class="card-body" style="margin-top:10px">${escHtml(item.body || "")}</p>`;
   } else if (item.type === "recipe") {
     body = `<h2 class="card-title">${escHtml(item.title)}</h2>
       <ul class="card-list">${(item.list || []).map(i => `<li>${escHtml(i)}</li>`).join("")}</ul>`;
@@ -786,11 +850,13 @@ function cardHTML(item) {
       item.stats.comments ? `<span title="comentários">✎ ${item.stats.comments}</span>` : ""
     ].filter(Boolean) : [];
     const stats = statParts.length ? `<div class="card-stats mono">${statParts.join("")}</div>` : "";
+    // title= carrega o CONTEÚDO (tooltip do texto truncado no modo compacto, B3);
+    // a instrução de ação vai pro aria-label (não compete com a descoberta do texto).
     const editable = item.id
-      ? ` contenteditable="false" data-editable="true" title="clique para renomear"`
+      ? ` contenteditable="false" data-editable="true" aria-label="clique para renomear" title="${escAttr(item.title || "Sem título")}"`
       : "";
     const editableBody = item.id
-      ? ` contenteditable="false" data-editable-body="true" title="clique para editar a descrição"`
+      ? ` contenteditable="false" data-editable-body="true" aria-label="clique para editar a descrição" title="${escAttr(item.body || "")}"`
       : "";
     // miniatura usada só no modo compacto (poster do vídeo / print salvo)
     const cthumb = item.image
@@ -816,7 +882,7 @@ function cardHTML(item) {
     : "";
   const footer = `
     <div class="card-footer">
-      <span class="card-time">${escHtml(item.time)}</span>
+      <span class="card-time">${escHtml(relativeTime(item))}</span>
       <div class="card-footer-right">${reportBtn}${action}${fav}</div>
     </div>`;
 
@@ -844,8 +910,33 @@ function renderNote(t) {
 // timestamp do item: o id "v<epoch>" carrega o momento do save; senão 0
 // (itens de seed sem epoch contam como "sempre" no filtro de período)
 function itemTimestamp(item) {
-  const m = String(item.id || "").match(/^v(\d{10,})$/);
+  const m = String(item.id || "").match(/^v(\d{13})$/); // epoch ms exato (13 díg.)
   return m ? Number(m[1]) : 0;
+}
+
+// época canônica do item em ms: o createdAt REAL (ISO, vindo do save ou do banco
+// via GET) tem prioridade; senão cai pro epoch embutido no id "v<epoch>"; senão 0.
+function itemEpoch(item) {
+  if (item && item.createdAt) {
+    const t = Date.parse(item.createdAt);
+    if (!Number.isNaN(t)) return t;
+  }
+  return itemTimestamp(item);
+}
+
+// data relativa amigável (pt-BR) a partir da época canônica do item.
+// Sem data válida → "" (não inventa "agora mesmo").
+function relativeTime(item) {
+  const ts = itemEpoch(item);
+  if (!ts) return "";
+  const MIN = 60000, HOUR = 3600000, DAY = 86400000;
+  const diff = Math.max(0, Date.now() - ts);
+  if (diff < MIN) return "guardado agora mesmo";
+  if (diff < HOUR) return `há ${Math.floor(diff / MIN)} min`;
+  if (diff < DAY) return `há ${Math.floor(diff / HOUR)} h`;
+  if (diff < 2 * DAY) return "ontem";
+  if (diff < 7 * DAY) return `há ${Math.floor(diff / DAY)} dias`;
+  return new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 function makeCard(item, isNew = false) {
@@ -861,20 +952,33 @@ function makeCard(item, isNew = false) {
   // metadados p/ o sistema de filtros (tipo + período)
   card.dataset.type = item.type || "video";
   card.dataset.source = item.source || "";
-  card.dataset.ts = itemTimestamp(item);
+  card.dataset.ts = itemEpoch(item);
   // texto pesquisável: só o conteúdo significativo (sem rótulos de UI)
   card.dataset.search = [item.title, item.body, item.text, item.quote, item.cat, sourceLabel(item.source), item.author]
     .filter(Boolean).join(" ");
+  card.classList.toggle("is-fav", !!item.fav); // F3: destaque do favorito
+  card.dataset.fav = item.fav ? "1" : "";
   card.innerHTML = cardHTML(item);
 
   // ---- EXPAND/COMPRIMIR card individual no modo compacto (animação de height) ----
   const foldBtn = card.querySelector(".card-fold");
   const toggleExpand = () => {
+    const savedY = window.scrollY;            // B2: preserva o scroll
     const isExpanded = card.classList.contains("is-expanded");
     const from = card.offsetHeight;
     card.classList.toggle("is-expanded", !isExpanded);
     if (foldBtn) foldBtn.innerHTML = isExpanded ? ICON_EXPAND : ICON_COMPRESS;
     const to = card.offsetHeight;
+    // B2: a troca grid→block (.is-expanded) força um reflow que, sem âncora de
+    // scroll e com scroll-behavior:smooth, joga a página pro topo. Restaura a
+    // posição instantaneamente (behavior auto) antes do paint da animação.
+    if (window.scrollY !== savedY) {
+      const prev = document.documentElement.style.scrollBehavior;
+      document.documentElement.style.scrollBehavior = "auto";
+      window.scrollTo(0, savedY);
+      document.documentElement.style.scrollBehavior = prev;
+    }
+    if (!isExpanded) markSeen(item.id);   // F2d: expandir um card = interação
     card.style.height = from + "px";
     card.classList.add("is-animating");
     card.style.transition = "height 300ms cubic-bezier(.2,.85,.25,1)";
@@ -954,6 +1058,7 @@ function makeCard(item, isNew = false) {
         card.querySelector(".note-body").replaceWith(ta);
         ta.style.height = `${ta.scrollHeight}px`;
         ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = `${ta.scrollHeight}px`; });
+        attachClear(ta); // U1: × pra limpar a nota inteira
         ta.focus();
         noteEdit.textContent = "salvar";
       }
@@ -970,6 +1075,24 @@ function makeCard(item, isNew = false) {
   const reportBtn = card.querySelector(".card-report");
   if (reportBtn) {
     reportBtn.addEventListener("click", e => { e.stopPropagation(); downloadEmbedReport(item, card); });
+  }
+
+  // F3: favoritar — realça o card na hora e o prioriza no topo no próximo render.
+  // Persiste em item.fav (data jsonb, sem migração) via updateSavedField → sync.
+  const favBtn = card.querySelector(".card-fav-btn");
+  if (favBtn && item.id) {
+    favBtn.addEventListener("click", e => {
+      e.stopPropagation();
+      item.fav = !item.fav;
+      card.classList.toggle("is-fav", item.fav);
+      card.dataset.fav = item.fav ? "1" : "";
+      favBtn.classList.toggle("is-on", item.fav);
+      favBtn.setAttribute("aria-pressed", item.fav ? "true" : "false");
+      favBtn.title = item.fav ? "remover destaque" : "destacar";
+      updateSavedField(item.id, "fav", item.fav);
+      if (item.fav) attachFxCanvas(card); else detachFxCanvas(card); // F3
+      markSeen(item.id);
+    });
   }
 
   // excluir (vai para a lixeira) — card amassa e cai, feed se fecha,
@@ -997,13 +1120,16 @@ function makeCard(item, isNew = false) {
   // título editável: clique para renomear, Enter/blur salva, Esc cancela
   const title = card.querySelector('[data-editable="true"]');
   if (title && item.id) {
-    title.addEventListener("click", () => { title.contentEditable = "true"; title.focus(); });
+    // .is-editing destrava o truncamento no modo compacto (B3) — sem isso o
+    // usuário renomeia "às cegas" dentro de uma linha cortada com reticências.
+    title.addEventListener("click", () => { title.contentEditable = "true"; title.classList.add("is-editing"); title.focus(); });
     title.addEventListener("keydown", e => {
       if (e.key === "Enter") { e.preventDefault(); title.blur(); }
       if (e.key === "Escape") { title.textContent = item.title; title.blur(); }
     });
     title.addEventListener("blur", () => {
       title.contentEditable = "false";
+      title.classList.remove("is-editing");
       const t = title.textContent.trim();
       if (t && t !== item.title) { item.title = t; updateSavedField(item.id, "title", t); }
       else title.textContent = item.title || "Sem título";
@@ -1024,6 +1150,10 @@ function makeCard(item, isNew = false) {
       if (t !== (item.body || "")) { item.body = t; updateSavedField(item.id, "body", t); }
     });
   }
+  // F2d: dwell tracking — só itens do usuário (seeds não contam pro "esquecidos")
+  if (item.id && !String(item.id).startsWith("seed-")) dwellObserver.observe(card);
+  // F3: card favorito ganha a camada de partículas no fundo
+  if (item.fav) attachFxCanvas(card);
   return card;
 }
 
@@ -1053,6 +1183,34 @@ function ensureTodayMark() {
 }
 
 // lista única de itens vivos: guardados pelo usuário (primeiro, em "hoje")
+// ordenação canônica ESTÁVEL: mais novo primeiro (época desc), com desempate
+// determinístico por id. O desempate é o que conserta o "scramble": itens
+// importados em lote têm created_at quase idêntico no banco → sem tie-break a
+// ordem do Postgres é instável; o id "v<epoch>" desempata e recupera a cronologia.
+function byEpochDesc(a, b) {
+  if (!!b.fav !== !!a.fav) return (b.fav ? 1 : 0) - (a.fav ? 1 : 0); // F3: favoritos no topo
+  const ea = itemEpoch(a), eb = itemEpoch(b);
+  if (eb !== ea) return eb - ea;
+  return String(b.id || "").localeCompare(String(a.id || ""));
+}
+
+// aplica a ordem manual do usuário (vault.order, salva no drag do modo compacto)
+// quando existir; itens fora dela (novos) sobem pro topo por época. Sem ordem
+// manual, cai no byEpochDesc puro. Religa o saveOrder, que hoje é órfão no render.
+function orderedUserItems(items) {
+  const order = loadOrder();
+  if (!order.length) return [...items].sort(byEpochDesc);
+  const pos = new Map(order.map((id, i) => [id, i]));
+  return [...items].sort((a, b) => {
+    const pa = pos.has(a.id) ? pos.get(a.id) : -1;
+    const pb = pos.has(b.id) ? pos.get(b.id) : -1;
+    if (pa === -1 && pb === -1) return byEpochDesc(a, b);
+    if (pa === -1) return -1; // novo (fora da ordem salva) → topo
+    if (pb === -1) return 1;
+    return pa - pb;
+  });
+}
+
 // + exemplos não excluídos, com a categoria possivelmente corrigida
 function currentItems() {
   const deleted = loadDeleted();
@@ -1068,31 +1226,377 @@ function currentItems() {
     .map(i => titleOv[i.id] !== undefined ? { ...i, title: titleOv[i.id] } : i)
     .map(i => bodyOv[i.id] !== undefined ? { ...i, body: bodyOv[i.id] } : i)
     .filter(i => !deleted.includes(i.id));
-  return [...userItems, ...seeds];
+  return [...orderedUserItems(userItems), ...seeds];
 }
 
-function buildFeed() {
-  feed.innerHTML = "";
-  let lastDay = null;
+// P1: placeholders animados enquanto loadFromServer não resolve. buildFeed()
+// faz feed.innerHTML="" ao terminar, então os skeletons somem sem limpeza extra.
+function renderSkeletons(n = 6) {
+  if (!feed) return;
+  const one = `<article class="card skeleton" aria-hidden="true"><div class="sk-thumb"></div><div class="sk-line"></div><div class="sk-line short"></div></article>`;
+  feed.innerHTML = one.repeat(n);
+}
+
+// ---- P2: render paginado + infinite scroll ----
+// Carrega FEED_PAGE itens por vez (inicial + a cada scroll), em vez de criar
+// 50+ cards/iframes numa tacada. Reduz drasticamente o custo de render inicial.
+const FEED_PAGE = 10;
+let _feedItems = [];       // lista ordenada completa (fonte do render)
+let _feedRendered = 0;     // quantos cards já estão no DOM
+let _feedLastDay = null;   // marcador de dia, preservado entre páginas
+let _feedSentinel = null;  // elemento observado no fim do feed
+let _feedObserver = null;  // IntersectionObserver do infinite scroll
+
+// renderiza as próximas n entradas de _feedItems (sempre ANTES do sentinel).
+function renderPage(n) {
+  const slice = _feedItems.slice(_feedRendered, _feedRendered + n);
   let delay = 0;
-
-  const all = currentItems();
-
-  all.forEach(item => {
-    if (item.day !== lastDay) {
+  for (const item of slice) {
+    if (item.day !== _feedLastDay) {
       const mark = document.createElement("div");
       mark.className = "daymark";
       mark.innerHTML = `<span>${item.day}</span>`;
       mark.dataset.day = item.day;
-      feed.appendChild(mark);
-      lastDay = item.day;
+      feed.insertBefore(mark, _feedSentinel);
+      _feedLastDay = item.day;
     }
     const card = makeCard(item);
-    card.style.animationDelay = `${0.25 + delay * 0.08}s`;
-    feed.appendChild(card);
+    card.style.animationDelay = `${0.04 + delay * 0.05}s`; // delay resetado por página
+    feed.insertBefore(card, _feedSentinel);
     delay++;
-  });
+  }
+  _feedRendered += slice.length;
+  if (_feedRendered >= _feedItems.length && _feedSentinel) {
+    _feedObserver?.disconnect();
+    _feedSentinel.remove();
+    _feedSentinel = null;
+  }
+}
 
+// força renderizar todo o resto — usado quando há filtro/busca ativos ou drag
+// (esses casos precisam enxergar TODOS os itens, não só a página atual).
+function renderAllRemaining() {
+  // só roda no feed paginado normal: se o sentinel não está no DOM (ex.: lixeira
+  // fez feed.innerHTML=""), não há feed pra completar — sai sem quebrar o insertBefore.
+  if (!_feedSentinel || !_feedSentinel.isConnected) return;
+  if (_feedRendered < _feedItems.length) renderPage(_feedItems.length - _feedRendered);
+}
+
+// ---- F1/F2: blocos "home" acima do feed ----
+const _lastSeenAtLoad = Number(localStorage.getItem("vault.lastSeen") || 0);
+let rememberOpen = false; // o carrossel "relembre" é sob demanda (botão na filterbar)
+
+// estamos na visão padrão (sem categoria/subtag/busca/filtro e fora da lixeira)?
+function homeView() {
+  return activeCat === "tudo" && !activeSub && !searchQuery.trim() && !filtersActive();
+}
+
+// representação compacta (SEM iframe) p/ os blocos home: thumb/favicon + título.
+// Clicável → maximiza NO APP (data-id; o handler do track resolve o item).
+function homeCardHTML(item) {
+  // imagem manda no thumb; sem imagem, NOTA mostra o próprio texto (clamp);
+  // senão favicon do link; senão o ✦.
+  const noteText = (item.type === "note" || item.type === "quote") ? (item.text || item.quote || "") : "";
+  let thumb;
+  if (item.image) thumb = `<img src="${escAttr(item.image)}" alt="" loading="lazy">`;
+  else if (noteText) thumb = `<span class="home-note">${escHtml(noteText)}</span>`;
+  else if (item.url) thumb = `<img class="home-favi" src="${faviconFor(item.url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">`;
+  else thumb = `<span class="home-ph">✦</span>`;
+  const full = item.title || item.text || item.quote || "Sem título";
+  return `<button type="button" class="home-card" data-id="${escAttr(item.id || "")}">`
+    + `<div class="home-thumb${noteText && !item.image ? " home-thumb-note" : ""}">${thumb}</div>`
+    + `<span class="home-card-title" title="${escAttr(full)}">${escHtml(full)}</span></button>`;
+}
+
+// drag-to-scroll com o mouse (desktop) — o touch já rola nativo com o dedo.
+// O flag `moved` evita que um arraste vire um clique de "maximizar".
+function initTrackDrag(track) {
+  if (!track) return;
+  let startX = 0, startScroll = 0, moved = false;
+  const onMove = e => {
+    const dx = e.clientX - startX;
+    if (Math.abs(dx) > 4) moved = true;
+    track.scrollLeft = startScroll - dx;
+  };
+  const onUp = () => {
+    track.classList.remove("is-grabbing");
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    setTimeout(() => { track._suppressClick = moved; }, 0);
+  };
+  track.addEventListener("mousedown", e => {
+    startX = e.clientX; startScroll = track.scrollLeft; moved = false;
+    track.classList.add("is-grabbing");
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
+}
+
+// liga drag + clique-pra-maximizar num bloco home
+function wireHomeTrack(sectionEl) {
+  const track = sectionEl.querySelector(".home-track");
+  if (!track) return;
+  initTrackDrag(track);
+  track.addEventListener("click", e => {
+    if (track._suppressClick) { track._suppressClick = false; return; } // veio de um drag
+    const card = e.target.closest(".home-card");
+    if (!card || !card.dataset.id) return;
+    const saved = loadSaved();
+    // F2c: lista navegável = os cards já revelados no track, na ordem exibida
+    const ids = [...track.querySelectorAll(".home-card")].map(c => c.dataset.id);
+    const list = ids.map(id => saved.find(i => i.id === id)).filter(Boolean);
+    const idx = ids.indexOf(card.dataset.id);
+    if (list.length) openCardMax(list[Math.max(0, idx)], list, idx);
+  });
+}
+
+// conteúdo (read-only) de UM card maximizado
+function cardMaxInner(item) {
+  const media = item.embed
+    ? item.embed
+    : item.image ? `<div class="card-thumb card-thumb-img"><img src="${escAttr(item.image)}" alt=""></div>` : "";
+  const title = item.title ? `<h2 class="card-title">${escHtml(item.title)}</h2>` : "";
+  const body = item.type === "note" ? `<div class="note-body">${renderNote(item.text || "")}</div>`
+    : item.type === "quote" ? `<p class="card-quote">${escHtml(item.quote || "")}</p>`
+    : item.body ? `<p class="card-body">${escHtml(item.body)}</p>` : "";
+  const link = item.url
+    ? `<a class="card-link" href="https://${escAttr(item.url)}" target="_blank" rel="noopener"><span class="card-link-ico">${ICON_EXTERNAL}</span>abrir original</a>`
+    : "";
+  return `<article class="card card-max-card${item.fav ? " is-fav" : ""}">${media}${title}${body}<div class="card-max-foot">${link}</div></article>`;
+}
+
+// maximiza um item NO APP (overlay), sem ir pro link externo. Read-only.
+// F2c: com uma LISTA (ex.: o relembre), permite NAVEGAR arrastando pros lados —
+// os vizinhos espiam esmaecidos nas bordas — sem sair do maximizado.
+function openCardMax(item, list, index) {
+  if (!item) return;
+  const items = (Array.isArray(list) && list.length) ? list : [item];
+  let idx = (typeof index === "number" && index >= 0) ? index : items.findIndex(i => i && i.id === item.id);
+  if (idx < 0) idx = 0;
+
+  const ov = document.createElement("div");
+  ov.className = "card-max-overlay" + (items.length > 1 ? " has-deck" : "");
+  const slides = items.map(it => `<div class="card-max-slide">${cardMaxInner(it)}</div>`).join("");
+  const navBtns = items.length > 1
+    ? `<button class="card-max-nav card-max-prev" aria-label="anterior">‹</button>`
+      + `<button class="card-max-nav card-max-next" aria-label="próximo">›</button>`
+    : "";
+  ov.innerHTML = `<button class="card-max-close" aria-label="fechar">×</button>`
+    + navBtns
+    + `<div class="card-max-viewport"><div class="card-max-deck">${slides}</div></div>`;
+  document.body.appendChild(ov);
+
+  const viewport = ov.querySelector(".card-max-viewport");
+  const deck = ov.querySelector(".card-max-deck");
+  const slideEls = [...deck.querySelectorAll(".card-max-slide")];
+
+  // F3: o efeito de partículas também no card maximizado (favoritos)
+  slideEls.forEach((s, i) => { if (items[i] && items[i].fav) attachFxCanvas(s.querySelector(".card-max-card")); });
+
+  // desloca o deck pra centralizar o slide `i` no viewport (vizinhos espiam)
+  function centerOffset(i) {
+    const s = slideEls[i];
+    return viewport.clientWidth / 2 - (s.offsetLeft + s.offsetWidth / 2);
+  }
+  let baseX = 0;
+  const markView = i => { const it = items[i]; if (it) markSeen(it.id); }; // F2d
+  function go(i, animate = true) {
+    idx = Math.max(0, Math.min(items.length - 1, i));
+    baseX = centerOffset(idx);
+    deck.style.transition = animate ? "transform .34s cubic-bezier(.2,.85,.25,1)" : "none";
+    deck.style.transform = `translateX(${baseX}px)`;
+    slideEls.forEach((s, k) => s.classList.toggle("is-active", k === idx));
+    ov.querySelector(".card-max-prev")?.classList.toggle("is-disabled", idx === 0);
+    ov.querySelector(".card-max-next")?.classList.toggle("is-disabled", idx === items.length - 1);
+    if (animate) markView(idx);   // navegação do usuário conta como "visto" (resize não)
+    fitReels();
+  }
+
+  // arraste horizontal (mouse + touch). Detecta o eixo pra não brigar com o
+  // scroll vertical de dentro do slide.
+  let startX = 0, startY = 0, dragging = false, moved = false, axis = null;
+  function down(x, y) { dragging = true; moved = false; axis = null; startX = x; startY = y; deck.classList.add("is-grabbing"); deck.style.transition = "none"; }
+  function move(x, y) {
+    if (!dragging) return;
+    const dx = x - startX, dy = y - startY;
+    if (!axis && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+    if (axis === "y") return;                       // deixa o slide rolar na vertical
+    if (Math.abs(dx) > 4) moved = true;
+    deck.style.transform = `translateX(${baseX + dx}px)`;
+  }
+  function up(x) {
+    if (!dragging) return;
+    dragging = false; deck.classList.remove("is-grabbing");
+    const dx = x - startX;
+    const TH = Math.min(90, viewport.clientWidth * 0.18);
+    if (axis !== "y" && dx <= -TH && idx < items.length - 1) go(idx + 1);
+    else if (axis !== "y" && dx >= TH && idx > 0) go(idx - 1);
+    else go(idx);
+  }
+  if (items.length > 1) {
+    // arraste em QUALQUER lugar da tela (o overlay cobre tudo) — desktop e mobile.
+    // Ignora os controles (setas/fechar/link) pra eles funcionarem no clique.
+    ov.addEventListener("mousedown", e => {
+      if (e.target.closest("button, a")) return;
+      e.preventDefault(); down(e.clientX, e.clientY);
+      const mm = ev => move(ev.clientX, ev.clientY);
+      const mu = ev => { up(ev.clientX); removeEventListener("mousemove", mm); removeEventListener("mouseup", mu); };
+      addEventListener("mousemove", mm); addEventListener("mouseup", mu);
+    });
+    ov.addEventListener("touchstart", e => down(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
+    ov.addEventListener("touchmove", e => move(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
+    ov.addEventListener("touchend", e => up((e.changedTouches[0] || {}).clientX ?? startX));
+
+    // roda do mouse vira navegação LATERAL enquanto o maximizado está aberto
+    // (ao fechar, o listener morre junto com o overlay → volta o scroll da timeline).
+    let wheelLock = false;
+    ov.addEventListener("wheel", e => {
+      e.preventDefault();
+      if (wheelLock) return;
+      const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (Math.abs(d) < 8) return;
+      go(idx + (d > 0 ? 1 : -1));
+      wheelLock = true; setTimeout(() => { wheelLock = false; }, 360);
+    }, { passive: false });
+
+    ov.querySelector(".card-max-prev").addEventListener("click", () => go(idx - 1));
+    ov.querySelector(".card-max-next").addEventListener("click", () => go(idx + 1));
+  }
+
+  const esc = ev => {
+    if (ev.key === "Escape") close();
+    else if (items.length > 1 && ev.key === "ArrowRight") go(idx + 1);
+    else if (items.length > 1 && ev.key === "ArrowLeft") go(idx - 1);
+  };
+  function close() { ov.remove(); removeEventListener("keydown", esc); window.removeEventListener("resize", onResize); }
+  const onResize = () => go(idx, false);
+  ov.addEventListener("click", e => {
+    if (moved) { moved = false; return; }            // um arraste não fecha o overlay
+    if (e.target === ov || e.target === viewport || e.target === deck || e.target.closest(".card-max-close")) close();
+  });
+  addEventListener("keydown", esc);
+  window.addEventListener("resize", onResize);
+
+  requestAnimationFrame(() => { go(idx, false); markView(idx); }); // posição + marca o slide inicial
+  fitReels();
+}
+
+// F1/F1b: "bem-vindo de volta" vira PÍLULA de notificação (não mais o carrossel
+// igual ao relembre): texto + "visualizar" (aplica o filtro de período "última
+// visita") + × pra fechar. Só aparece se a visita foi há > 2h e há itens novos.
+let _morningDismissed = false;
+
+function freshSinceLastSeen() {
+  const old = _lastSeenAtLoad;
+  if (!(old && Date.now() - old > 2 * 3600000)) return [];
+  return loadSaved().filter(i => itemEpoch(i) > old).sort(byEpochDesc);
+}
+
+function renderMorningReminder() {
+  const el = document.getElementById("morningReminder");
+  if (!el) return;
+  const fresh = freshSinceLastSeen();
+  if (!fresh.length) { el.hidden = true; el.innerHTML = ""; el.classList.remove("morning-pill"); return; }
+  const n = fresh.length;
+  el.classList.add("morning-pill");
+  el.innerHTML = `<span class="pill-dot" aria-hidden="true">✦</span>`
+    + `<span class="pill-text"><strong>Bem-vindo de volta:</strong> ${n} ${n === 1 ? "coisa nova" : "coisas novas"} desde a última visita.</span>`
+    + `<button type="button" class="pill-view">Visualizar</button>`
+    + `<button type="button" class="pill-close" aria-label="fechar">×</button>`;
+  if (!el._wired) {
+    el._wired = true;
+    el.addEventListener("click", e => {
+      if (e.target.closest(".pill-view")) showLastVisit();
+      else if (e.target.closest(".pill-close")) { _morningDismissed = true; el.hidden = true; }
+    });
+  }
+  el.hidden = !homeView() || _morningDismissed;
+}
+
+// F1b: o "visualizar" da pílula liga o filtro de período "última visita" — a
+// timeline passa a mostrar só o que foi guardado desde a visita anterior.
+function showLastVisit() {
+  filterPeriod = "lastvisit";
+  _morningDismissed = true;
+  renderCats();          // reflete o chip "filtrar" ativo
+  applyFilter();         // updateHomeBlocks() esconde a pílula (homeView() = false)
+  document.getElementById("feed")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+// F2/F2b: carrossel "relembre" — sob demanda (botão). Paginação: carrega 5 e
+// puxa +5 ao arrastar/rolar até o fim, máximo 20 (não despeja tudo de uma vez).
+const REMEMBER_PAGE = 5;
+const REMEMBER_MAX = 20;
+let _rememberPool = [];   // candidatos já ordenados (fonte do render)
+let _rememberShown = 0;   // quantos cards já estão no track
+
+// F2d: ordem dos candidatos do relembre = os "esquecidos". Antes era aleatório;
+// agora prioriza quem você NÃO viu há mais tempo (ou nunca), com desempate pelo
+// item mais antigo. Usa o tracking de interação (vault.seen).
+function rememberCandidates(all) {
+  const seen = loadSeen();
+  const lastSeenOf = it => { const r = seen[it.id]; return r && r.lastSeen ? r.lastSeen : 0; };
+  return [...all].sort((a, b) => {
+    const la = lastSeenOf(a), lb = lastSeenOf(b);
+    if (la !== lb) return la - lb;            // menos recentemente visto (0 = nunca) primeiro
+    return itemEpoch(a) - itemEpoch(b);       // empate: o mais antigo primeiro
+  }).slice(0, REMEMBER_MAX);
+}
+
+// adiciona a próxima página de cards ao fim do track (sem recriar os existentes)
+function appendRememberPage(track) {
+  const slice = _rememberPool.slice(_rememberShown, _rememberShown + REMEMBER_PAGE);
+  track.insertAdjacentHTML("beforeend", slice.map(homeCardHTML).join(""));
+  _rememberShown += slice.length;
+}
+
+function renderRememberCarousel() {
+  const el = document.getElementById("rememberCarousel");
+  if (!el) return;
+  const all = loadSaved();
+  if (!rememberOpen || all.length < 5) { el.hidden = true; el.innerHTML = ""; return; }
+  _rememberPool = rememberCandidates(all);
+  _rememberShown = 0;
+  el.innerHTML = `<div class="home-head"><span class="home-title">relembre</span>`
+    + `<span class="home-sub">toque num card pra ver aqui</span></div>`
+    + `<div class="home-track"></div>`;
+  const track = el.querySelector(".home-track");
+  appendRememberPage(track);
+  wireHomeTrack(el);
+  // paginação: ao arrastar/rolar perto do fim, revela mais (até REMEMBER_MAX).
+  // o drag (initTrackDrag) mexe em scrollLeft → dispara este mesmo evento.
+  track.addEventListener("scroll", () => {
+    if (_rememberShown >= _rememberPool.length) return;
+    if (track.scrollLeft + track.clientWidth >= track.scrollWidth - 140) appendRememberPage(track);
+  }, { passive: true });
+  el.hidden = false;
+}
+
+// alterna a visibilidade dos blocos: morning segue a home view; remember segue o botão
+function updateHomeBlocks() {
+  const mr = document.getElementById("morningReminder");
+  if (mr) mr.hidden = !homeView() || !mr.innerHTML.trim() || _morningDismissed;
+  const rc = document.getElementById("rememberCarousel");
+  if (rc) rc.hidden = !rememberOpen || !rc.innerHTML.trim();
+}
+
+function buildFeed() {
+  if (_feedObserver) _feedObserver.disconnect();
+  feed.innerHTML = "";
+  _feedLastDay = null;
+  _feedRendered = 0;
+  _feedItems = currentItems();
+
+  _feedSentinel = document.createElement("div");
+  _feedSentinel.className = "feed-sentinel";
+  _feedSentinel.setAttribute("aria-hidden", "true");
+  feed.appendChild(_feedSentinel);
+  _feedObserver = new IntersectionObserver(entries => {
+    if (entries.some(e => e.isIntersecting) && _feedRendered < _feedItems.length) renderPage(FEED_PAGE);
+  }, { rootMargin: "700px 0px" }); // pré-carrega antes de chegar no fim
+  _feedObserver.observe(_feedSentinel);
+
+  renderPage(FEED_PAGE);
   updateCount();
   renderCats();
   applyFilter();
@@ -1183,6 +1687,7 @@ themeToggle.addEventListener("click", () => {
   const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
   localStorage.setItem(THEME_KEY, next);
   applyTheme(next);
+  fxRebuildAll(); // F3: o efeito usa o config do tema ativo (cor/geometria próprias)
 });
 
 // default é "light" (primeiro acesso entra em claro). O tema salvo já foi
@@ -1255,6 +1760,236 @@ function fitReels() {
 
 window.addEventListener("resize", fitReels); // redundância: cobre resize de viewport
 
+/* ---------- F3: partículas no FUNDO dos favoritos (2D canvas por card) ----------
+   Cada favorito ganha um <canvas> 2D como filho com z-index:-1 → pinta SOBRE o
+   fundo do card mas ATRÁS de todo o conteúdo (tag, embed, ícones, título). Canvas
+   2D não tem o limite de ~16 contextos do WebGL, então um por card é seguro e um
+   favorito não interfere no outro. Tudo controlável pelo painel (vault.fxconfig). */
+const FX_KEY = "vault.fxconfig";
+// Config por tema. Concentração MÁXIMA no topo, dissipando pra baixo (menos
+// quantidade + mais apagado); `feather` suaviza a borda da máscara (nunca as
+// shapes); `topLight` clareia a cor em direção ao topo (sem chegar a branco).
+// Defaults = valores afinados pelo Paulo nos sliders.
+const FX_DEFAULTS = {
+  dark:  { on: 1, density: 92, size: 1.4, opacity: 0.27, intensity: 0.22, speed: 2.75, waveScale: 18, zoneTop: 0, zoneHeight: 12, sides: 0, feather: 1, topLight: 0.28, color: "#ff7433" },
+  light: { on: 1, density: 91, size: 2.7, opacity: 0.17, intensity: 0.03, speed: 4, waveScale: 1, zoneTop: 0, zoneHeight: 19, sides: 0, feather: 0.65, topLight: 0, color: "#ff7433" },
+};
+// NÃO usar loadJSON aqui: este módulo roda ANTES de loadJSON inicializar (const,
+// mais abaixo) → TDZ travaria o init. Config é POR TEMA (dark/claro), cada um com
+// sua cor; o efeito usa sempre o config do tema ativo.
+let fxConfigs = (() => {
+  const def = { dark: { ...FX_DEFAULTS.dark }, light: { ...FX_DEFAULTS.light } };
+  try {
+    const s = JSON.parse(localStorage.getItem(FX_KEY) || "{}");
+    return { dark: { ...def.dark, ...(s.dark || {}) }, light: { ...def.light, ...(s.light || {}) } };
+  } catch { return def; }
+})();
+function fxTheme() { return document.documentElement.dataset.theme === "dark" ? "dark" : "light"; }
+function fxCur() { return fxConfigs[fxTheme()]; }
+function fxSave() { localStorage.setItem(FX_KEY, JSON.stringify(fxConfigs)); }
+function fxHexToRgb(h) {
+  const m = String(h).match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  return m ? `${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)}` : "212,73,15";
+}
+const _fxEntries = new Map();   // card -> { canvas, ctx, pts, w, h, ro }
+const _fxVisible = new WeakSet();
+let _fxRAF = 0;
+
+const _fxIO = new IntersectionObserver(ents => {
+  ents.forEach(e => { if (e.isIntersecting) _fxVisible.add(e.target); else _fxVisible.delete(e.target); });
+}, { rootMargin: "120px" });
+
+function fxSmoothstep(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+
+// peso do ponto (0..1): MÁXIMO no topo, dissipando pra baixo (suave, com `feather`
+// alargando a transição = "blur" da máscara). `sides` adiciona um leve abraço nas
+// laterais. fx/fy normalizados (0..1) no card.
+function fxWeight(fx, fy, cfg) {
+  const top = cfg.zoneTop / 100;
+  const reach = Math.max(0.01, cfg.zoneHeight / 100);
+  const feather = Math.max(0, cfg.feather ?? 0.3);
+  const vy = (fy - top) / reach;                 // 0 no início da zona, 1 no fim
+  // vertical: 1 → 0, com a borda suavizada pelo feather (alarga a cauda)
+  const vw = vy <= 0 ? 1 : 1 - fxSmoothstep(0, 1 + feather * 2, vy);
+  // laterais: leve reforço perto das bordas L/R (também suavizado)
+  const sr = (cfg.sides || 0) / 100;
+  let sw = 0;
+  if (sr > 0.001) sw = Math.max(1 - fxSmoothstep(0, sr * (1 + feather), fx), 1 - fxSmoothstep(0, sr * (1 + feather), 1 - fx));
+  return Math.max(0, Math.min(1, Math.max(vw, sw * 0.85)));
+}
+
+// grade jitterada; a CONCENTRAÇÃO cai com o peso (thinning probabilístico) → mais
+// denso no topo, rareando pra baixo. Guarda o peso `w` (usado no alpha e na cor).
+function fxBuildPoints(entry) {
+  const { w, h } = entry;
+  if (!w || !h) { entry.pts = []; return; }
+  const cfg = fxCur();
+  const spacing = Math.max(2.6, 16 - (cfg.density / 100) * 13.2); // densidade ↑ → espaçamento ↓
+  const cols = Math.max(1, Math.floor(w / spacing));
+  const rows = Math.max(1, Math.floor(h / spacing));
+  const jit = spacing * 0.3;                     // jitter baixo → quadrados não se empilham
+  const pts = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = (c + 0.5) * (w / cols) + (Math.random() - 0.5) * jit;
+      const y = (r + 0.5) * (h / rows) + (Math.random() - 0.5) * jit;
+      const wt = fxWeight(x / w, y / h, cfg);
+      if (wt <= 0.02) continue;                  // fora da zona → nem guarda (perf)
+      if (Math.random() > 0.15 + 0.85 * wt) continue; // menos quantidade onde o peso é menor
+      pts.push({ x, y, w: wt, ph: Math.random() * Math.PI * 2 });
+    }
+  }
+  entry.pts = pts;
+}
+
+function fxResize(card, entry) {
+  const rect = card.getBoundingClientRect();
+  const w = Math.round(rect.width), h = Math.round(rect.height);
+  if (!w || !h) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  entry.w = w; entry.h = h;
+  entry.canvas.width = Math.round(w * dpr); entry.canvas.height = Math.round(h * dpr);
+  entry.canvas.style.width = w + "px"; entry.canvas.style.height = h + "px";
+  entry.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fxBuildPoints(entry);
+}
+
+function fxRebuildAll() { _fxEntries.forEach((en, card) => fxResize(card, en)); }
+
+function attachFxCanvas(card) {
+  if (!card || _fxEntries.has(card)) return;
+  const canvas = document.createElement("canvas");
+  canvas.className = "fav-fx";
+  canvas.setAttribute("aria-hidden", "true");
+  card.insertBefore(canvas, card.firstChild);
+  const entry = { canvas, ctx: canvas.getContext("2d"), pts: [], w: 0, h: 0, ro: null };
+  _fxEntries.set(card, entry);
+  fxResize(card, entry);
+  // o card pode ainda não ter layout (makeCard cria antes de inserir no feed) →
+  // rebuild no próximo frame garante medir o tamanho real, sem depender só do RO.
+  requestAnimationFrame(() => { if (_fxEntries.has(card)) fxResize(card, entry); });
+  entry.ro = new ResizeObserver(() => fxResize(card, entry));
+  entry.ro.observe(card);
+  _fxIO.observe(card);
+  fxEnsureLoop();
+}
+
+function detachFxCanvas(card) {
+  const e = _fxEntries.get(card);
+  if (!e) return;
+  e.ro?.disconnect();
+  _fxIO.unobserve(card);
+  _fxVisible.delete(card);
+  e.canvas.remove();
+  _fxEntries.delete(card);
+}
+
+function fxDraw(tMs) {
+  const t = tMs / 1000;
+  const cfg = fxCur();
+  const { size, opacity, intensity, speed, waveScale, on } = cfg;
+  const topLight = Math.max(0, Math.min(1, cfg.topLight ?? 0));
+  const rgb = fxHexToRgb(cfg.color).split(",").map(Number);
+  const half = size / 2;
+  for (const card of [..._fxEntries.keys()]) {
+    const e = _fxEntries.get(card);
+    if (!card.isConnected) { detachFxCanvas(card); continue; }   // card saiu do DOM (rebuild)
+    const ctx = e.ctx;
+    ctx.clearRect(0, 0, e.w, e.h);
+    ctx.shadowBlur = 0; ctx.shadowColor = "transparent";         // shapes SEMPRE nítidas
+    // PERF: só desenha favoritos DENTRO da viewport (offscreen = não processa)
+    if (!on || !_fxVisible.has(card) || !e.pts.length) continue;
+    for (const p of e.pts) {
+      const nx = p.x / e.w;
+      const wave = Math.sin(t * speed + nx * waveScale + (p.y / e.h) * waveScale * 0.5 + p.ph);
+      let lit = 0.5 + 0.5 * wave;
+      lit = Math.pow(lit, 1 + intensity * 4);     // intensidade afia o acende/apaga
+      const a = opacity * lit * p.w;              // p.w = peso (concentração/opacidade caem pra baixo)
+      if (a < 0.015) continue;
+      // cor clareia em direção ao topo (peso alto), sem chegar a branco (teto 0.85)
+      const k = Math.min(0.85, topLight * p.w);
+      const cr = (rgb[0] + (255 - rgb[0]) * k) | 0;
+      const cg = (rgb[1] + (255 - rgb[1]) * k) | 0;
+      const cb = (rgb[2] + (255 - rgb[2]) * k) | 0;
+      ctx.fillStyle = `rgba(${cr},${cg},${cb},${a.toFixed(3)})`;
+      ctx.fillRect(p.x - half, p.y - half, size, size);   // QUADRADINHOS nítidos
+    }
+  }
+  _fxRAF = _fxEntries.size ? requestAnimationFrame(fxDraw) : 0;
+}
+
+function fxEnsureLoop() {
+  if (!_fxRAF && _fxEntries.size) _fxRAF = requestAnimationFrame(fxDraw);
+}
+
+// painel de controle (tuning) — DOIS conjuntos (modo escuro / claro), com cor.
+// Persistido em vault.fxconfig. Ferramenta de ajuste: esconder antes de produção.
+function buildFxPanel() {
+  if (document.getElementById("fxPanel")) return;
+  const fields = [
+    ["on", "ligado", 0, 1, 1], ["density", "densidade", 10, 100, 1],
+    ["size", "tamanho", 0.5, 8, 0.1], ["opacity", "opacidade", 0, 1, 0.01],
+    ["intensity", "intensidade", 0, 1, 0.01], ["speed", "velocidade", 0, 4, 0.05],
+    ["waveScale", "onda (escala)", 1, 24, 0.5], ["zoneTop", "zona: topo %", 0, 60, 1],
+    ["zoneHeight", "zona: altura %", 2, 100, 1], ["sides", "laterais %", 0, 50, 1],
+    ["feather", "suavizar borda", 0, 1, 0.01], ["topLight", "clarear topo", 0, 1, 0.01],
+  ];
+  let editMode = fxTheme();   // qual config estamos ajustando (default = tema atual)
+  const wrap = document.createElement("div");
+  wrap.id = "fxPanel";
+  wrap.innerHTML = `<button class="fx-toggle" title="ajustar o efeito dos favoritos">✦ fx</button>
+    <div class="fx-body" hidden>
+      <div class="fx-head mono">efeito dos favoritos</div>
+      <div class="fx-tabs">
+        <button class="fx-tab" data-mode="dark">🌙 escuro</button>
+        <button class="fx-tab" data-mode="light">☀️ claro</button>
+      </div>
+      <label class="fx-row fx-color"><span>cor</span><input type="color" data-fx="color"></label>
+      ${fields.map(([k, l, mn, mx, st]) => `<label class="fx-row"><span>${l} <em data-fxval="${k}"></em></span>
+        <input type="range" data-fx="${k}" min="${mn}" max="${mx}" step="${st}"></label>`).join("")}
+      <div class="fx-acts"><button class="fx-reset">padrão deste tema</button><button class="fx-copy">copiar JSON</button></div>
+    </div>`;
+  document.body.appendChild(wrap);
+  const body = wrap.querySelector(".fx-body");
+
+  const refresh = () => {
+    const cfg = fxConfigs[editMode];
+    wrap.querySelectorAll(".fx-tab").forEach(t => t.classList.toggle("is-active", t.dataset.mode === editMode));
+    wrap.querySelectorAll("[data-fx]").forEach(i => {
+      const k = i.dataset.fx;
+      i.value = cfg[k];
+      const em = wrap.querySelector(`[data-fxval="${k}"]`);
+      if (em) em.textContent = cfg[k];
+    });
+  };
+  refresh();
+
+  wrap.querySelector(".fx-toggle").addEventListener("click", () => { body.hidden = !body.hidden; });
+  wrap.querySelectorAll(".fx-tab").forEach(t => t.addEventListener("click", () => { editMode = t.dataset.mode; refresh(); }));
+  wrap.addEventListener("input", e => {
+    const inp = e.target.closest("[data-fx]"); if (!inp) return;
+    const k = inp.dataset.fx;
+    const v = inp.type === "color" ? inp.value : parseFloat(inp.value);
+    fxConfigs[editMode][k] = v;
+    const em = wrap.querySelector(`[data-fxval="${k}"]`);
+    if (em) em.textContent = v;
+    fxSave();
+    if (editMode === fxTheme() && (k === "density" || k === "zoneTop" || k === "zoneHeight" || k === "sides" || k === "feather")) fxRebuildAll();
+    fxEnsureLoop();
+  });
+  wrap.querySelector(".fx-reset").addEventListener("click", () => {
+    fxConfigs[editMode] = { ...FX_DEFAULTS[editMode] };
+    fxSave(); refresh();
+    if (editMode === fxTheme()) fxRebuildAll();
+    fxEnsureLoop();
+  });
+  wrap.querySelector(".fx-copy").addEventListener("click", () => {
+    navigator.clipboard?.writeText(JSON.stringify(fxConfigs));
+    showToast("valores do efeito (dark+claro) copiados");
+  });
+}
+
+
 // o embed do Twitter manda a altura real via postMessage → ajusta o iframe
 addEventListener("message", e => {
   if (!/twitter\.com|x\.com/.test(e.origin)) return;
@@ -1324,6 +2059,11 @@ function matchesSearch(haystack, query) {
 
 function applyFilter() {
   const q = searchQuery.trim();
+  // P2: com filtro/busca ativos, renderiza TODO o resto antes de filtrar — senão
+  // o filtro só enxergaria a página já carregada e esconderia matches ainda não
+  // renderizados. Sem filtro, a paginação segue intacta (ganho no load inicial).
+  // Na lixeira (__trash) NÃO renderiza — o #feed é a view da lixeira, não o feed paginado.
+  if (activeCat !== "__trash" && (q || activeCat !== "tudo" || activeSub || filtersActive() || filterFav)) renderAllRemaining();
   const cards = feed.querySelectorAll(".card");
   cards.forEach(c => {
     const byCat = activeCat !== "tudo" && c.dataset.cat !== activeCat;
@@ -1331,7 +2071,8 @@ function applyFilter() {
     const byText = q && !matchesSearch(c.dataset.search || c.textContent, q);
     const byType = !passesType(c);
     const byPeriod = !passesPeriod(c);
-    c.classList.toggle("is-hidden", byCat || bySub || byText || byType || byPeriod);
+    const byFav = filterFav && !c.classList.contains("is-fav"); // botão prioridade
+    c.classList.toggle("is-hidden", byCat || bySub || byText || byType || byPeriod || byFav);
   });
   feed.querySelectorAll(".daymark").forEach(mark => {
     let el = mark.nextElementSibling;
@@ -1342,6 +2083,7 @@ function applyFilter() {
     }
     mark.style.display = visible ? "" : "none";
   });
+  updateHomeBlocks(); // F1/F2: blocos home só na visão padrão
 }
 
 let catsExpanded = false;        // "mais" revela todas as categorias
@@ -1352,6 +2094,7 @@ const VIEW_KEY = "vault.view";
 let viewMode = localStorage.getItem(VIEW_KEY) || "full"; // "full" | "compact"
 let filterType = "all";          // all | video | note | image
 let filterPeriod = "all";        // all | today | week | month
+let filterFav = false;           // botão de prioridade: mostra só os favoritos
 
 function applyViewMode() {
   document.body.classList.toggle("view-compact", viewMode === "compact");
@@ -1459,6 +2202,10 @@ function initDrag() {
 
   function startDrag(card, clientX, clientY) {
     if (viewMode !== "compact") return;
+    // P2: garante TODOS os cards no DOM antes de reordenar, senão saveOrder
+    // gravaria só a ordem da página visível (cards abaixo entram no fim, sem
+    // mexer no card sendo arrastado nem nos de cima — rect capturado depois).
+    renderAllRemaining();
     dragging = card;
     lastOver = null;
     // marca o feed em "reordenamento": o CSS então zera a rotação decorativa
@@ -1615,6 +2362,9 @@ function passesPeriod(card) {
   if (filterPeriod === "all") return true;
   const ts = Number(card.dataset.ts || 0);
   if (!ts) return true; // itens sem timestamp (seed) não somem no filtro
+  // F1b: "última visita" é um corte ABSOLUTO (desde a visita anterior), não uma
+  // janela relativa como hoje/7d/30d.
+  if (filterPeriod === "lastvisit") return ts > _lastSeenAtLoad;
   return (Date.now() - ts) <= PERIOD_MS[filterPeriod];
 }
 
@@ -1645,6 +2395,16 @@ function markActiveChip() {
 }
 
 function onFilterClick(e) {
+  const rem = e.target.closest(".chip-remember");
+  if (rem) {
+    rememberOpen = !rememberOpen;
+    renderRememberCarousel();
+    rem.classList.toggle("is-active", rememberOpen);
+    if (rememberOpen) document.getElementById("rememberCarousel")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
+  const prio = e.target.closest(".chip-prio");
+  if (prio) { filterFav = !filterFav; prio.classList.toggle("is-active", filterFav); applyFilter(); return; }
   const view = e.target.closest(".chip-view");
   if (view) { toggleViewMode(); return; }
   const filt = e.target.closest(".chip-filter");
@@ -1784,6 +2544,8 @@ function openFilterDropdown(chipEl) {
 
   const TYPES = [["all", "tudo"], ["video", "vídeos"], ["note", "notas"], ["image", "imagens"]];
   const PERIODS = [["all", "sempre"], ["today", "hoje"], ["week", "7 dias"], ["month", "30 dias"]];
+  // FILT/F1b: "última visita" como período — só quando há uma visita anterior real
+  if (_lastSeenAtLoad > 0) PERIODS.push(["lastvisit", "última visita"]);
 
   const render = () => {
     dd.innerHTML = `
@@ -2012,7 +2774,7 @@ function buildTrashChip() {
   const trash = document.createElement("button");
   trash.className = "chip chip-trash";
   trash.dataset.cat = "__trash";
-  trash.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M10 4h4M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg><span class="trash-label">lixeira</span>`;
+  trash.innerHTML = `<svg viewBox="0 0 18 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17.25 3H13.5V2.25C13.5 1.65326 13.2629 1.08097 12.841 0.65901C12.419 0.237053 11.8467 0 11.25 0H6.75C6.15326 0 5.58097 0.237053 5.15901 0.65901C4.73705 1.08097 4.5 1.65326 4.5 2.25V3H0.75C0.551088 3 0.360322 3.07902 0.21967 3.21967C0.0790178 3.36032 0 3.55109 0 3.75C0 3.94891 0.0790178 4.13968 0.21967 4.28033C0.360322 4.42098 0.551088 4.5 0.75 4.5H1.5V18C1.5 18.3978 1.65804 18.7794 1.93934 19.0607C2.22064 19.342 2.60218 19.5 3 19.5H15C15.3978 19.5 15.7794 19.342 16.0607 19.0607C16.342 18.7794 16.5 18.3978 16.5 18V4.5H17.25C17.4489 4.5 17.6397 4.42098 17.7803 4.28033C17.921 4.13968 18 3.94891 18 3.75C18 3.55109 17.921 3.36032 17.7803 3.21967C17.6397 3.07902 17.4489 3 17.25 3ZM6 2.25C6 2.05109 6.07902 1.86032 6.21967 1.71967C6.36032 1.57902 6.55109 1.5 6.75 1.5H11.25C11.4489 1.5 11.6397 1.57902 11.7803 1.71967C11.921 1.86032 12 2.05109 12 2.25V3H6V2.25ZM15 18H3V4.5H15V18ZM7.5 8.25V14.25C7.5 14.4489 7.42098 14.6397 7.28033 14.7803C7.13968 14.921 6.94891 15 6.75 15C6.55109 15 6.36032 14.921 6.21967 14.7803C6.07902 14.6397 6 14.4489 6 14.25V8.25C6 8.05109 6.07902 7.86032 6.21967 7.71967C6.36032 7.57902 6.55109 7.5 6.75 7.5C6.94891 7.5 7.13968 7.57902 7.28033 7.71967C7.42098 7.86032 7.5 8.05109 7.5 8.25ZM12 8.25V14.25C12 14.4489 11.921 14.6397 11.7803 14.7803C11.6397 14.921 11.4489 15 11.25 15C11.0511 15 10.8603 14.921 10.7197 14.7803C10.579 14.6397 10.5 14.4489 10.5 14.25V8.25C10.5 8.05109 10.579 7.86032 10.7197 7.71967C10.8603 7.57902 11.0511 7.5 11.25 7.5C11.4489 7.5 11.6397 7.57902 11.7803 7.71967C11.921 7.86032 12 8.05109 12 8.25Z"/></svg><span class="trash-label">lixeira</span>`;
   if (activeCat === "__trash") trash.classList.add("is-active");
   return trash;
 }
@@ -2042,20 +2804,34 @@ function renderCats() {
   present.forEach(c => filters.appendChild(chipEl(c, c)));
   filters.classList.toggle("is-expanded", catsExpanded);
 
+  // "relembre" (F2) — antes do compacto; abre/fecha o carrossel sob demanda
+  const remember = document.createElement("button");
+  remember.className = "chip chip-remember" + (rememberOpen ? " is-active" : "");
+  remember.title = "relembre";
+  remember.innerHTML = `<svg viewBox="0 0 19 18" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M10.5 4.50003V8.57534L13.8863 10.6069C14.0568 10.7093 14.1797 10.8753 14.2279 11.0684C14.2761 11.2614 14.2456 11.4657 14.1431 11.6363C14.0407 11.8068 13.8747 11.9297 13.6816 11.9779C13.4886 12.0261 13.2843 11.9956 13.1138 11.8932L9.36375 9.64315C9.25276 9.57647 9.16093 9.48219 9.09718 9.36949C9.03344 9.25679 8.99996 9.12951 9 9.00003V4.50003C9 4.30112 9.07902 4.11035 9.21967 3.9697C9.36032 3.82905 9.55109 3.75003 9.75 3.75003C9.94891 3.75003 10.1397 3.82905 10.2803 3.9697C10.421 4.11035 10.5 4.30112 10.5 4.50003ZM9.75 2.77605e-05C8.56687 -0.00291932 7.3949 0.22881 6.30193 0.681803C5.20895 1.1348 4.21667 1.80006 3.3825 2.63909C2.70094 3.32909 2.09531 3.99284 1.5 4.68753V3.00003C1.5 2.80112 1.42098 2.61035 1.28033 2.4697C1.13968 2.32905 0.948912 2.25003 0.75 2.25003C0.551088 2.25003 0.360322 2.32905 0.21967 2.4697C0.0790176 2.61035 0 2.80112 0 3.00003V6.75003C0 6.94894 0.0790176 7.13971 0.21967 7.28036C0.360322 7.42101 0.551088 7.50003 0.75 7.50003H4.5C4.69891 7.50003 4.88968 7.42101 5.03033 7.28036C5.17098 7.13971 5.25 6.94894 5.25 6.75003C5.25 6.55112 5.17098 6.36035 5.03033 6.2197C4.88968 6.07905 4.69891 6.00003 4.5 6.00003H2.34375C3.01406 5.21065 3.68156 4.46722 4.44281 3.69659C5.48518 2.65423 6.8116 1.94216 8.25635 1.64935C9.70109 1.35654 11.2001 1.49598 12.566 2.05023C13.932 2.60449 15.1043 3.54899 15.9366 4.76572C16.7688 5.98245 17.224 7.41745 17.2453 8.89142C17.2666 10.3654 16.8531 11.813 16.0564 13.0532C15.2598 14.2935 14.1152 15.2716 12.7659 15.8651C11.4165 16.4586 9.92221 16.6414 8.46959 16.3905C7.01698 16.1396 5.67052 15.4662 4.59844 14.4544C4.52679 14.3867 4.4425 14.3338 4.35039 14.2986C4.25828 14.2635 4.16015 14.2468 4.0616 14.2496C3.96305 14.2524 3.86602 14.2746 3.77604 14.3149C3.68606 14.3551 3.6049 14.4128 3.53719 14.4844C3.46947 14.5561 3.41654 14.6403 3.3814 14.7325C3.34626 14.8246 3.32961 14.9227 3.3324 15.0212C3.33518 15.1198 3.35735 15.2168 3.39764 15.3068C3.43792 15.3968 3.49554 15.4779 3.56719 15.5457C4.63542 16.5537 5.93414 17.285 7.35 17.6757C8.76587 18.0665 10.2558 18.1047 11.6899 17.7872C13.1239 17.4696 14.4585 16.8059 15.577 15.854C16.6956 14.9021 17.5642 13.6909 18.107 12.3261C18.6498 10.9613 18.8503 9.48439 18.6911 8.02426C18.5318 6.56414 18.0177 5.16517 17.1934 3.94947C16.3692 2.73376 15.2599 1.73825 13.9625 1.04982C12.665 0.361401 11.2188 0.000983756 9.75 2.77605e-05Z"/></svg>`;
+  filterActions.appendChild(remember);
+
+  // prioridade (★) — botão-filtro: mostra só os favoritos
+  const prio = document.createElement("button");
+  prio.className = "chip chip-prio" + (filterFav ? " is-active" : "");
+  prio.title = "prioridade (favoritos)";
+  prio.innerHTML = ICON_STAR;
+  filterActions.appendChild(prio);
+
   // alternar visualização: timeline (cheia) ↔ compacta
   const view = document.createElement("button");
   view.className = "chip chip-view" + (viewMode === "compact" ? " is-active" : "");
   view.title = viewMode === "compact" ? "visualização: compacta" : "visualização: timeline";
   view.innerHTML = viewMode === "compact"
-    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>`
-    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="14" width="16" height="6" rx="1.5"/></svg>`;
+    ? `<svg viewBox="0 0 18 15" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M16.5 8.25H1.5C1.10218 8.25 0.720644 8.40804 0.43934 8.68934C0.158035 8.97064 0 9.35218 0 9.75V13.5C0 13.8978 0.158035 14.2794 0.43934 14.5607C0.720644 14.842 1.10218 15 1.5 15H16.5C16.8978 15 17.2794 14.842 17.5607 14.5607C17.842 14.2794 18 13.8978 18 13.5V9.75C18 9.35218 17.842 8.97064 17.5607 8.68934C17.2794 8.40804 16.8978 8.25 16.5 8.25ZM16.5 13.5H1.5V9.75H16.5V13.5ZM16.5 0H1.5C1.10218 0 0.720644 0.158035 0.43934 0.43934C0.158035 0.720644 0 1.10218 0 1.5V5.25C0 5.64782 0.158035 6.02936 0.43934 6.31066C0.720644 6.59196 1.10218 6.75 1.5 6.75H16.5C16.8978 6.75 17.2794 6.59196 17.5607 6.31066C17.842 6.02936 18 5.64782 18 5.25V1.5C18 1.10218 17.842 0.720644 17.5607 0.43934C17.2794 0.158035 16.8978 0 16.5 0ZM16.5 5.25H1.5V1.5H16.5V5.25Z"/></svg>`
+    : `<svg viewBox="0 0 14 21" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M11.25 0H2.25C1.65326 0 1.08097 0.237053 0.65901 0.65901C0.237053 1.08097 0 1.65326 0 2.25V18.75C0 19.3467 0.237053 19.919 0.65901 20.341C1.08097 20.7629 1.65326 21 2.25 21H11.25C11.8467 21 12.419 20.7629 12.841 20.341C13.2629 19.919 13.5 19.3467 13.5 18.75V2.25C13.5 1.65326 13.2629 1.08097 12.841 0.65901C12.419 0.237053 11.8467 0 11.25 0ZM12 18.75C12 18.9489 11.921 19.1397 11.7803 19.2803C11.6397 19.421 11.4489 19.5 11.25 19.5H2.25C2.05109 19.5 1.86032 19.421 1.71967 19.2803C1.57902 19.1397 1.5 18.9489 1.5 18.75V2.25C1.5 2.05109 1.57902 1.86032 1.71967 1.71967C1.86032 1.57902 2.05109 1.5 2.25 1.5H11.25C11.4489 1.5 11.6397 1.57902 11.7803 1.71967C11.921 1.86032 12 2.05109 12 2.25V18.75ZM10.5 3.75C10.5 3.94891 10.421 4.13968 10.2803 4.28033C10.1397 4.42098 9.94891 4.5 9.75 4.5H3.75C3.55109 4.5 3.36032 4.42098 3.21967 4.28033C3.07902 4.13968 3 3.94891 3 3.75C3 3.55109 3.07902 3.36032 3.21967 3.21967C3.36032 3.07902 3.55109 3 3.75 3H9.75C9.94891 3 10.1397 3.07902 10.2803 3.21967C10.421 3.36032 10.5 3.55109 10.5 3.75Z"/></svg>`;
   filterActions.appendChild(view);
 
   // filtros (tipo / período)
   const filt = document.createElement("button");
   filt.className = "chip chip-filter" + (filtersActive() ? " is-active" : "");
   filt.title = "filtrar";
-  filt.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg>`;
+  filt.innerHTML = `<svg viewBox="0 0 18 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M0.75 3.75588H3.84375C4.00898 4.40119 4.38428 4.97316 4.91048 5.38161C5.43669 5.79006 6.08387 6.01176 6.75 6.01176C7.41613 6.01176 8.06331 5.79006 8.58952 5.38161C9.11572 4.97316 9.49102 4.40119 9.65625 3.75588H17.25C17.4489 3.75588 17.6397 3.67686 17.7803 3.53621C17.921 3.39556 18 3.20479 18 3.00588C18 2.80697 17.921 2.6162 17.7803 2.47555C17.6397 2.3349 17.4489 2.25588 17.25 2.25588H9.65625C9.49102 1.61057 9.11572 1.0386 8.58952 0.630153C8.06331 0.221702 7.41613 0 6.75 0C6.08387 0 5.43669 0.221702 4.91048 0.630153C4.38428 1.0386 4.00898 1.61057 3.84375 2.25588H0.75C0.551088 2.25588 0.360322 2.3349 0.21967 2.47555C0.0790178 2.6162 0 2.80697 0 3.00588C0 3.20479 0.0790178 3.39556 0.21967 3.53621C0.360322 3.67686 0.551088 3.75588 0.75 3.75588ZM6.75 1.50588C7.04667 1.50588 7.33668 1.59386 7.58336 1.75868C7.83003 1.9235 8.02229 2.15777 8.13582 2.43186C8.24935 2.70595 8.27906 3.00755 8.22118 3.29852C8.1633 3.58949 8.02044 3.85676 7.81066 4.06654C7.60088 4.27632 7.33361 4.41918 7.04264 4.47706C6.75166 4.53494 6.45006 4.50523 6.17598 4.3917C5.90189 4.27817 5.66762 4.08591 5.5028 3.83924C5.33797 3.59256 5.25 3.30255 5.25 3.00588C5.25 2.60806 5.40804 2.22653 5.68934 1.94522C5.97064 1.66392 6.35218 1.50588 6.75 1.50588ZM17.25 11.2559H15.6562C15.491 10.6106 15.1157 10.0386 14.5895 9.63015C14.0633 9.2217 13.4161 9 12.75 9C12.0839 9 11.4367 9.2217 10.9105 9.63015C10.3843 10.0386 10.009 10.6106 9.84375 11.2559H0.75C0.551088 11.2559 0.360322 11.3349 0.21967 11.4756C0.0790178 11.6162 0 11.807 0 12.0059C0 12.2048 0.0790178 12.3956 0.21967 12.5362C0.360322 12.6769 0.551088 12.7559 0.75 12.7559H9.84375C10.009 13.4012 10.3843 13.9732 10.9105 14.3816C11.4367 14.7901 12.0839 15.0118 12.75 15.0118C13.4161 15.0118 14.0633 14.7901 14.5895 14.3816C15.1157 13.9732 15.491 13.4012 15.6562 12.7559H17.25C17.4489 12.7559 17.6397 12.6769 17.7803 12.5362C17.921 12.3956 18 12.2048 18 12.0059C18 11.807 17.921 11.6162 17.7803 11.4756C17.6397 11.3349 17.4489 11.2559 17.25 11.2559ZM12.75 13.5059C12.4533 13.5059 12.1633 13.4179 11.9166 13.2531C11.67 13.0883 11.4777 12.854 11.3642 12.5799C11.2506 12.3058 11.2209 12.0042 11.2788 11.7132C11.3367 11.4223 11.4796 11.155 11.6893 10.9452C11.8991 10.7354 12.1664 10.5926 12.4574 10.5347C12.7483 10.4768 13.0499 10.5065 13.324 10.6201C13.5981 10.7336 13.8324 10.9259 13.9972 11.1725C14.162 11.4192 14.25 11.7092 14.25 12.0059C14.25 12.4037 14.092 12.7852 13.8107 13.0665C13.5294 13.3478 13.1478 13.5059 12.75 13.5059Z"/></svg>`;
   filterActions.appendChild(filt);
 
   // "+N" / "−": calculado pela viewport (quantas pílulas ficaram escondidas no
@@ -2141,6 +2917,7 @@ function updateTrashChip() {
 
 function renderTrash() {
   updateEmptyState();   // na lixeira nunca centraliza como "vazio"
+  updateHomeBlocks();   // F1/F2: esconde os blocos home na lixeira
   const trash = loadTrash();
   feed.innerHTML = "";
   if (!trash.length) {
@@ -2431,6 +3208,33 @@ function growIntake() {
   input.style.height = `${Math.min(input.scrollHeight, innerHeight * 0.4)}px`;
 }
 
+// U1: adiciona um botão × de limpar a um input/textarea dinâmico. O × aparece
+// só quando há conteúdo; ao clicar, zera o campo e dispara "input" (pra que
+// listeners existentes reajam) sem roubar o foco no mousedown.
+function attachClear(el) {
+  if (!el || el._hasClear) return;
+  el._hasClear = true;
+  const wrap = document.createElement("span");
+  wrap.className = "field-clear-wrap";
+  el.parentNode.insertBefore(wrap, el);
+  wrap.appendChild(el);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "field-clear";
+  btn.setAttribute("aria-label", "limpar");
+  btn.textContent = "×";
+  wrap.appendChild(btn);
+  const sync = () => wrap.classList.toggle("has-value", String(el.value).trim().length > 0);
+  el.addEventListener("input", sync);
+  btn.addEventListener("mousedown", e => e.preventDefault());
+  btn.addEventListener("click", () => {
+    el.value = "";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.focus();
+  });
+  sync();
+}
+
 const intakeField = document.querySelector(".intake-field");
 
 // limpa a busca e volta o ícone para bookmark (após guardar, p. ex.)
@@ -2497,6 +3301,20 @@ input.addEventListener("input", () => {
   applyFilter();
 });
 
+// U1: botão × do campo principal. Reusa clearSearch()/growIntake() e o is-typing
+// que o CSS usa pra mostrar/esconder o ×. mousedown preventDefault evita perder
+// o foco antes do click no celular.
+const intakeClear = document.getElementById("intakeClear");
+intakeClear?.addEventListener("mousedown", e => e.preventDefault());
+intakeClear?.addEventListener("click", () => {
+  input.value = "";
+  clearSearch();
+  intakeField.classList.remove("is-link");
+  input.style.height = "";
+  growIntake();
+  input.focus();
+});
+
 // toque (celular) → Enter quebra linha; mouse (PC) → Enter guarda
 const isTouch = matchMedia("(hover: none) and (pointer: coarse)").matches;
 
@@ -2515,8 +3333,21 @@ input.addEventListener("keydown", e => {
   }
 });
 
+// se o usuário está vendo a LIXEIRA, volta pro feed normal antes de inserir um
+// item novo. Sem isso, o card vivo (com embed) seria injetado no DOM da lixeira
+// e a paginação ficaria stale (sentinel destacado → insertBefore quebra). Como
+// o buildFeed roda ANTES do persist, o item novo não duplica.
+function exitTrashView() {
+  if (activeCat !== "__trash") return;
+  activeCat = "tudo";
+  activeSub = null;
+  buildFeed();
+  markActiveChip();
+}
+
 // insere um item novo no topo do feed (notas, prints e links usam isto)
 function insertNewItem(newItem, statusMsg) {
+  exitTrashView();
   try {
     persist(newItem);
   } catch {
@@ -2560,7 +3391,7 @@ async function saveNote(text) {
     type: "note",
     title: (text.split("\n")[0] || "Nota").slice(0, 60),
     text,
-    time: "guardado agora mesmo",
+    createdAt: new Date().toISOString(),
     url: null
   }, `✦ nota guardada em <strong>${escHtml(cat)}</strong>`);
 }
@@ -2605,7 +3436,7 @@ async function savePrintFromFile(file) {
       body: "",
       image: dataUrl,
       embed: null,
-      time: "guardado agora mesmo",
+      createdAt: new Date().toISOString(),
       url: null
     }, "✦ imagem guardada — clique no título para renomear");
   } catch {
@@ -2661,9 +3492,11 @@ form.addEventListener("submit", async e => {
   setStatus(AI_STEPS[3]);
   await new Promise(r => setTimeout(r, 400));
 
-  // monta o embed com o URL final resolvido — links /share/ do Facebook
-  // viram o endereço canônico; meta traz as dimensões p/ o aspect ratio real
-  let embed = buildEmbed(meta?.url || url, meta) || buildEmbed(url, meta);
+  // monta o embed PREFERINDO o link que o usuário colou (preserva /reel/, /p/ etc.).
+  // O Microlink (meta.url) às vezes canonicaliza um reel pra /p/, e embed de reel
+  // via /p/ o Instagram rejeita ("link broken"). Só cai pro meta.url quando o link
+  // do usuário não rende embed (ex.: link curto vm./vt.tiktok, fb.watch).
+  let embed = buildEmbed(url, meta) || buildEmbed(meta?.url, meta);
   let fallbackImage = null;
   let fallbackTitle = null;
   let fallbackBody = null;
@@ -2677,6 +3510,16 @@ form.addEventListener("submit", async e => {
       fallbackTitle = "Vídeo no YouTube";
       fallbackBody = "O dono desativou a incorporação — use “abrir original” para assistir.";
     }
+  }
+
+  // Fallback genérico (B6): link social reconhecido mas SEM embed (anúncio/boost
+  // que o player recusa, formato não suportado). A imagem do preview já entra via
+  // meta.image (linha do `image:` abaixo); aqui só garantimos uma MENSAGEM clara
+  // quando não há nem título, evitando um card "vazio" sem explicação.
+  const SOCIAL_SOURCES = ["instagram", "facebook", "youtube", "tiktok", "twitter", "threads", "vimeo"];
+  if (!embed && SOCIAL_SOURCES.includes(source) && !meta?.title) {
+    fallbackTitle = fallbackTitle || "Visualização indisponível";
+    fallbackBody = fallbackBody || "Não consegui incorporar este link — toque em “abrir original” para ver.";
   }
 
   // classifica pelo conteúdo real (título + descrição), não pelo URL
@@ -2708,10 +3551,11 @@ form.addEventListener("submit", async e => {
     isPrivate: isFbPrivate || undefined,
     image: isFbPrivate ? null : (fallbackImage || meta?.image || null),
     thumb: null,
-    time: "guardado agora mesmo",
+    createdAt: new Date().toISOString(),
     url: stripTracking(url).replace(/^https?:\/\//, "")
   };
 
+  exitTrashView(); // volta pro feed normal se estava na lixeira (antes do persist)
   persist(newItem);
 
   const firstMark = ensureTodayMark();
@@ -2942,11 +3786,28 @@ async function loadFromServer() {
 
 /* ---------- init ---------- */
 (async () => {
+  renderSkeletons();       // P1: placeholders enquanto o servidor não responde
   await loadFromServer();  // popula o cache com os dados DESTE usuário (RLS)
   applyViewMode();         // restaura modo compacto/timeline salvo
   buildFeed();             // já chama renderCats() internamente
+  renderMorningReminder(); // F1: lembrete de itens da última visita
+  renderRememberCarousel();// F2: carrossel "relembre"
   initDrag();              // ativa drag-to-reorder no modo compacto
   updateTrashChip();
   refreshAiToggle();
+  // F3: painel de ajuste é função SUPER-USER (escondido por padrão). Abre com
+  // Ctrl+Shift+F (ou se vault.su já estiver ligado). Espaço p/ mais ferramentas su.
+  if (localStorage.getItem("vault.su") === "1") buildFxPanel();
+  addEventListener("keydown", e => {
+    if (e.ctrlKey && e.shiftKey && (e.key === "F" || e.key === "f")) {
+      e.preventDefault();
+      if (localStorage.getItem("vault.su") === "1") { localStorage.removeItem("vault.su"); document.getElementById("fxPanel")?.remove(); }
+      else { localStorage.setItem("vault.su", "1"); buildFxPanel(); }
+    }
+  });
+  // garante que os favoritos do load inicial meçam o tamanho real (pós-layout)
+  requestAnimationFrame(() => requestAnimationFrame(fxRebuildAll));
+  setTimeout(fxRebuildAll, 400);
   document.documentElement.classList.add("app-ready"); // libera o endcap (anti-flash)
+  localStorage.setItem("vault.lastSeen", String(Date.now())); // marca esta visita (F1)
 })();
